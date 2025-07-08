@@ -5,13 +5,13 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # https://stackoverflow.com/questions/66602656/no-module-named-numpy-during-docker-build
-RUN python3 -m pip install --upgrade pip setuptools wheel   
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel   
 
 # Install any needed packages specified in requirements.txt
-RUN pip install pytoon
+RUN pip install --no-cache-dir pytoon
 
 # Install FastAPI and Uvicorn and other dependencies
-RUN pip install fastapi uvicorn python-multipart moviepy==1.0.3 audioop-lts==0.2.1 
+RUN pip install --no-cache-dir fastapi uvicorn python-multipart moviepy==1.0.3 audioop-lts==0.2.1
 
 # Install NLTK data
 RUN python -m nltk.downloader punkt averaged_perceptron_tagger averaged_perceptron_tagger_eng cmudict words
