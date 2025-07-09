@@ -4,6 +4,10 @@ FROM python:3.13-slim
 # Set the working directory in the container
 WORKDIR /app
 
+# LibGL.so.1 is missing
+# https://stackoverflow.com/questions/55313610/importerror-libgl-so-1-cannot-open-shared-object-file-no-such-file-or-directo
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+
 # https://stackoverflow.com/questions/66602656/no-module-named-numpy-during-docker-build
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel   
 
