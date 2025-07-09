@@ -6,6 +6,11 @@ from moviepy.editor import VideoFileClip
 
 app = FastAPI()
 
+# Upload transcript as speech.txt
+@app.get("/", status_code=status.HTTP_200_OK)
+async def welcome():
+    return {"message": "Welcome to the PyToon API!"}
+
 # Upload audio file as speech.mp3
 @app.post("/upload_audio", status_code=status.HTTP_200_OK)
 async def upload_audio(file: UploadFile = File(...)):
