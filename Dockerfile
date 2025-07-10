@@ -15,7 +15,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir pytoon
 
 # Install FastAPI and Uvicorn and other dependencies
-RUN pip install --no-cache-dir fastapi uvicorn python-multipart moviepy==1.0.3 audioop-lts==0.2.1
+RUN pip install --no-cache-dir fastapi uvicorn python-multipart moviepy==1.0.3 audioop-lts==0.2.1 pathlib2
 
 # Install NLTK data
 RUN python -m nltk.downloader punkt averaged_perceptron_tagger averaged_perceptron_tagger_eng cmudict words

@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, status
 from fastapi.responses import FileResponse
 from pytoon.animator import animate
 from moviepy.editor import VideoFileClip
-
+from pathlib2 import Path
 
 app = FastAPI()
 
@@ -47,11 +47,20 @@ def create_animation(audio_file: str = "speech.mp3",
     :return: Path to the exported video file.
     """
     # If a transcript is provided, read it from the file.
-    if transcript:
+    transcript_path = Path(transcript)
+    if transcript_path.is_file():
+        # file exists
         with open(transcript, "r") as file:
             transcript_content = file.read()
     else:
         transcript_content = None
+
+    # if transcript:
+    #     with open(transcript, "r") as file:
+    #         transcript_content = file.read()
+    # else:
+    #     transcript_content = None
+    
     # Create a PyToon animation with or without a transcript
     animation = animate(
         audio_file=audio_file,
