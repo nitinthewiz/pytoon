@@ -37,3 +37,9 @@ jobs:
     - name: Run tests
       run: |
         python main.py
+
+
+    - uses: actions/upload-artifact@v4
+        with:
+          name: animation.mp4
+          path: animation.mp4
