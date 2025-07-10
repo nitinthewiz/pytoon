@@ -39,7 +39,8 @@ jobs:
         python main.py
 
 
-    - uses: actions/upload-artifact@v4
-        with:
-          name: animation.mp4
-          path: animation.mp4
+    - name: Upload animation to github actions results
+      uses: actions/upload-artifact@v4
+      with:
+        name: animation.mp4
+        path: animation.mp4
