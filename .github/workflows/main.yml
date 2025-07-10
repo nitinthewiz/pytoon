@@ -1,0 +1,30 @@
+name: Python Application CI
+
+on:
+  push:
+    branches:
+      - self-hosted-runner
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # pip install -r requirements.txt
+        pip install pytoon 
+
+    - name: Run tests
+      run: |
+        python main.py
