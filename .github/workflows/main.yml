@@ -104,12 +104,12 @@ jobs:
     #       TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID: ${{secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID}}
     #       MESSAGE: "The links for today - ${{steps.links_file.outputs.contents}}"
 
-    - name: Read file contents
-      if: ${{ success() }}
-      id: links_file
-      uses: andstor/file-reader-action@v1
-      with:
-        path: animation.mp4
+    # - name: Read file contents
+    #   if: ${{ success() }}
+    #   id: links_file
+    #   uses: andstor/file-reader-action@v1
+    #   with:
+    #     path: animation.mp4
 
     - name: Upload links file to telegram
       if: ${{ success() }}
@@ -118,4 +118,4 @@ jobs:
         chat-id: ${{secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID}}
         files: |
           animation.mp4
-        BOT_TOKEN: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
+        token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
