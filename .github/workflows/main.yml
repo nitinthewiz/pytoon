@@ -70,11 +70,11 @@ jobs:
 
     - name: Authenticate MinIO client 
       run: |
-        mc alias set myminio ${{ secrets.MINIO_ENDPOINT }} ${{ secrets.MINIO_ACCESS_KEY }} ${{ secrets.MINIO_SECRET_KEY }} --insecure
+        ${{ secrets.MINIO_MC_PATH }}\mc alias set myminio ${{ secrets.MINIO_ENDPOINT }} ${{ secrets.MINIO_ACCESS_KEY }} ${{ secrets.MINIO_SECRET_KEY }} --insecure
 
     - name: Download audio_input using MinIO mc 
       run: |
-        mc get myminio/${{ secrets.MINIO_BUCKET_NAME }}/${{ inputs.audio_input }} ./speech.mp3
+        ${{ secrets.MINIO_MC_PATH }}\mc get myminio/${{ secrets.MINIO_BUCKET_NAME }}/${{ inputs.audio_input }} ./speech.mp3
 
     - name: Run pytoon
       run: |
