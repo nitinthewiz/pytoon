@@ -5,6 +5,11 @@ on:
     branches:
       - self-hosted-runner
   workflow_dispatch:
+    inputs:
+      audio_input:
+        description: 'The audio file name to use'
+        required: false
+        default: 'speech.mp3'  
 
 jobs:
   build:
@@ -33,8 +38,26 @@ jobs:
     - name: Install dependencies
       run: |
         python -m nltk.downloader punkt averaged_perceptron_tagger averaged_perceptron_tagger_eng cmudict words
+    
+    # - name: Download audio file if it's a URL and save it as speech.mp3 
+    #   run: |
+    #     if (${{ inputs.audio_input }} -like "http*") {
+    #       Invoke-WebRequest -Uri ${{ inputs.audio_input }} -OutFile "speech.mp3"
+    #     }
 
-    - name: Run tests
+    - name: Download from MinIO if audio_input is a URL 
+      # if: startsWith(inputs.audio_input, 'http')
+      uses: yakubique/minio-download@v1.1.1
+      with:
+        endpoint: ${{ secrets.MINIO_ENDPOINT }}
+        access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+        secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+        bucket: ${{ secrets.MINIO_BUCKET_NAME }}
+        # Leading slash is required
+        source: '/${{ inputs.audio_input }}'
+        target: './speech.mp3'
+
+    - name: Run pytoon
       run: |
         python main.py
 
