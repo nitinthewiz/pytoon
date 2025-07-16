@@ -45,25 +45,36 @@ jobs:
     #       Invoke-WebRequest -Uri ${{ inputs.audio_input }} -OutFile "speech.mp3"
     #     }
 
-    - name: Setup MinIO client
-      uses: yakubique/setup-minio-cli@v1
-      with:
-        use_cache: true
-    - name: Test MinIO client
-      run: |
-        mc --help
+    # - name: Setup MinIO client
+    #   uses: yakubique/setup-minio-cli@v1
+    #   with:
+    #     use_cache: true
+    # - name: Test MinIO client
+    #   run: |
+    #     mc --help
 
-    - name: Download from MinIO if audio_input is a URL 
-      # if: startsWith(inputs.audio_input, 'http')
-      uses: yakubique/minio-download@v1.1.1
-      with:
-        endpoint: ${{ secrets.MINIO_ENDPOINT }}
-        access_key: ${{ secrets.MINIO_ACCESS_KEY }}
-        secret_key: ${{ secrets.MINIO_SECRET_KEY }}
-        bucket: ${{ secrets.MINIO_BUCKET_NAME }}
-        # Leading slash is required
-        source: '/${{ inputs.audio_input }}'
-        target: './speech.mp3'
+    # - name: Download from MinIO if audio_input is a URL 
+    #   # if: startsWith(inputs.audio_input, 'http')
+    #   uses: yakubique/minio-download@v1.1.1
+    #   with:
+    #     endpoint: ${{ secrets.MINIO_ENDPOINT }}
+    #     access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+    #     secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+    #     bucket: ${{ secrets.MINIO_BUCKET_NAME }}
+    #     # Leading slash is required
+    #     source: '/${{ inputs.audio_input }}'
+    #     target: './speech.mp3'
+    #     insecure: true
+
+    ### MinIO mc has already been downloaded and installed on self-hosted runner
+
+    - name: Authenticate MinIO client 
+      run: |
+        mc alias set myminio ${{ secrets.MINIO_ENDPOINT }} ${{ secrets.MINIO_ACCESS_KEY }} ${{ secrets.MINIO_SECRET_KEY }} --insecure
+
+    - name: Download audio_input using MinIO mc 
+      run: |
+        mc get myminio/${{ secrets.MINIO_BUCKET_NAME }}/${{ inputs.audio_input }} ./speech.mp3
 
     - name: Run pytoon
       run: |
