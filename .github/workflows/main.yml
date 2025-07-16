@@ -47,6 +47,8 @@ jobs:
 
     - name: Setup MinIO client
       uses: yakubique/setup-minio-cli@v1
+      with:
+        use_cache: true
     - name: Test MinIO client
       run: |
         mc --help
