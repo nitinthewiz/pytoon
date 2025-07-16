@@ -118,5 +118,4 @@ jobs:
         chat-id: ${{secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID}}
         files: |
           animation.mp4
-      with:
         BOT_TOKEN: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
