@@ -1,9 +1,9 @@
 name: Build animation
 
 on:
-  push:
-    branches:
-      - self-hosted-runner
+  # push:
+  #   branches:
+  #     - self-hosted-runner
   workflow_dispatch:
     inputs:
       audio_input:
