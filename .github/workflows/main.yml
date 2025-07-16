@@ -105,11 +105,11 @@ jobs:
     #       MESSAGE: "The links for today - ${{steps.links_file.outputs.contents}}"
 
     - name: Read file contents
-        if: ${{ success() }}
-        id: links_file
-        uses: andstor/file-reader-action@v1
-        with:
-          path: animation.mp4
+      if: ${{ success() }}
+      id: links_file
+      uses: andstor/file-reader-action@v1
+      with:
+        path: animation.mp4
 
     - name: Upload links file to telegram
       if: ${{ success() }}
