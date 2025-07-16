@@ -113,7 +113,7 @@ jobs:
 
     - name: Upload links file to telegram
       if: ${{ success() }}
-      uses: nyaruta/tg-file-action@v0
+      uses: nyaruta/tg-file-action@v0.2.0
       with:
         chat-id: ${{secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID}}
         files: |
