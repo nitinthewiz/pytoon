@@ -1,0 +1,69 @@
+name: Build animation
+
+on:
+  # push:
+  #   branches:
+  #     - self-hosted-runner
+  workflow_dispatch:
+    inputs:
+      audio_input:
+        description: 'The audio file name to use'
+        required: false
+        default: 'speech.mp3'  
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+        cache: 'pip' # caching pip dependencies - testing this instead of actions/cache
+
+    - name: Install pytoon
+      run: |
+        python -m pip install --upgrade pip
+        # pip install -r requirements.txt
+        pip install pytoon 
+    
+    - name: Install moviepy and audioop
+      run: |
+        pip install moviepy==1.0.3 audioop-lts==0.2.1
+
+    - name: Install dependencies
+      run: |
+        python -m nltk.downloader punkt averaged_perceptron_tagger averaged_perceptron_tagger_eng cmudict words
+    
+    # - name: Download audio file if it's a URL and save it as speech.mp3 
+    #   run: |
+    #     if (${{ inputs.audio_input }} -like "http*") {
+    #       Invoke-WebRequest -Uri ${{ inputs.audio_input }} -OutFile "speech.mp3"
+    #     }
+
+    - name: Download from MinIO if audio_input is a URL 
+      # if: startsWith(inputs.audio_input, 'http')
+      uses: yakubique/minio-download@v1.1.1
+      with:
+        endpoint: ${{ secrets.MINIO_ENDPOINT }}
+        access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+        secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+        bucket: ${{ secrets.MINIO_BUCKET_NAME }}
+        # Leading slash is required
+        source: '/${{ inputs.audio_input }}'
+        target: './speech.mp3'
+
+    - name: Run pytoon
+      run: |
+        python main.py
+
+
+    - name: Upload animation to github actions results
+      uses: actions/upload-artifact@v4
+      with:
+        name: animation.mp4
+        path: animation.mp4
