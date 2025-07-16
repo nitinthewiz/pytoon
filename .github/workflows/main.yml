@@ -45,6 +45,13 @@ jobs:
     #       Invoke-WebRequest -Uri ${{ inputs.audio_input }} -OutFile "speech.mp3"
     #     }
 
+
+    - name: Setup MinIO client
+      uses: yakubique/setup-minio-cli@v1
+    - name: Test MinIO client
+      run: |
+        mc --help
+
     - name: Download from MinIO if audio_input is a URL 
       # if: startsWith(inputs.audio_input, 'http')
       uses: yakubique/minio-download@v1.1.1
