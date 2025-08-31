@@ -111,11 +111,23 @@ jobs:
     #   with:
     #     path: animation.mp4
 
-    - name: Upload video file to telegram
+    # nyaruta/tg-file-action has disappeared from the face of the earth it seems
+    # so switching to xireiki/channel-post@v1 to test it
+    # - name: Upload video file to telegram
+    #   if: ${{ success() }}
+    #   uses: nyaruta/tg-file-action@v0.2.0
+    #   with:
+    #     chat-id: ${{secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID}}
+    #     files: |
+    #       animation.mp4
+    #     token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
+
+
+    - name: Upload video file to telegram using xireiki/channel-post@v1
       if: ${{ success() }}
-      uses: nyaruta/tg-file-action@v0.2.0
+      uses: xireiki/channel-post@v1
       with:
-        chat-id: ${{secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID}}
-        files: |
-          animation.mp4
-        token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
+        bot_token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
+        chat_id: ${{ secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID }}
+        path: animation.mp4
+        method: sendVideo
