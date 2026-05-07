@@ -5,7 +5,12 @@ out.mp4
 final.mp4
 .vscode
 *.egg-info/
-build 
+build
 dist
 test.mp4
 output_animation.mp4
+remotion/node_modules/
+remotion/public/images/
+render-props.json
+news.json
+speech.txt
