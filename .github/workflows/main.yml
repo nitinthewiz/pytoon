@@ -79,6 +79,18 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Cache Remotion node_modules
+      id: cache-remotion
+      uses: actions/cache@v4
+      with:
+        path: remotion/node_modules
+        key: remotion-${{ hashFiles('remotion/package-lock.json') }}
+
+    - name: Install Remotion dependencies
+      if: steps.cache-remotion.outputs.cache-hit != 'true'
+      run: npm ci
+      working-directory: remotion
+
     - name: Build background video
       if: ${{ inputs.news_b64 != '' }}
       run: node build_background.js
