@@ -3,4 +3,10 @@
 // Available from @remotion/transitions: fade, slide, wipe, flip, clockWipe, none
 import { clockWipe, fade, flip, slide, wipe } from '@remotion/transitions';
 
-export const APPROVED_TRANSITIONS = [fade, slide, wipe, flip, clockWipe];
+export const APPROVED_TRANSITIONS = [
+  () => fade(),
+  () => slide(),
+  () => wipe(),
+  () => flip(),
+  () => clockWipe(),
+];
