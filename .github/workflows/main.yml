@@ -82,7 +82,7 @@ jobs:
     - name: Cache Remotion Chrome Headless Shell
       uses: actions/cache@v4
       with:
-        path: ~\AppData\Local\remotion
+        path: ~\.cache\puppeteer
         key: remotion-chrome-${{ hashFiles('remotion/package-lock.json') }}
 
     - name: Cache Remotion node_modules
@@ -95,6 +95,10 @@ jobs:
     - name: Install Remotion dependencies
       if: steps.cache-remotion.outputs.cache-hit != 'true'
       run: npm ci
+      working-directory: remotion
+
+    - name: Ensure Remotion browser
+      run: npx remotion browser ensure
       working-directory: remotion
 
     - name: Build background video
