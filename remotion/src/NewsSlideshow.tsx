@@ -4,7 +4,7 @@ import { TransitionSeries, linearTiming } from '@remotion/transitions';
 import { APPROVED_TRANSITIONS } from './transitions';
 
 export type NewsItem = {
-  imagePath: string;
+  imagePath: string | null;
   durationInFrames: number;
 };
 
@@ -39,10 +39,28 @@ export const NewsSlideshow: React.FC<Props> = ({ items }) => {
               <React.Fragment key={i}>
                 <TransitionSeries.Sequence durationInFrames={item.durationInFrames}>
                   <AbsoluteFill>
-                    <Img
-                      src={staticFile(item.imagePath)}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    {item.imagePath ? (
+                      <AbsoluteFill style={{ padding: 28, boxSizing: 'border-box' }}>
+                        <div
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            border: '3px solid rgba(255,255,255,0.8)',
+                            borderRadius: 10,
+                            overflow: 'hidden',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Img
+                            src={staticFile(item.imagePath)}
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          />
+                        </div>
+                      </AbsoluteFill>
+                    ) : null}
                   </AbsoluteFill>
                 </TransitionSeries.Sequence>
                 {i < items.length - 1 && (

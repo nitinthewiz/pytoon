@@ -23,10 +23,16 @@ async function main() {
   const newsItems = JSON.parse(fs.readFileSync(NEWS_JSON, 'utf8'));
   const speechText = fs.readFileSync(SPEECH_TXT, 'utf8');
 
-  const segments = speechText.split('[ITEM]').map(s => s.trim()).filter(Boolean);
+  // Split on [ITEM]. If speech starts with intro text before the first [ITEM],
+  // segments[0] is that intro — it should show a blank slide, not a news image.
+  const allSegments = speechText.split('[ITEM]').map(s => s.trim()).filter(Boolean);
 
-  if (segments.length === 0 || newsItems.length === 0) {
-    console.log('No segments or news items — using existing background_video.mp4');
+  const hasIntro = !speechText.trimStart().startsWith('[ITEM]');
+  const introSegment = hasIntro ? allSegments[0] : null;
+  const storySegments = hasIntro ? allSegments.slice(1) : allSegments;
+
+  if (storySegments.length === 0 || newsItems.length === 0) {
+    console.log('No story segments or news items — using existing background_video.mp4');
     return;
   }
 
@@ -36,17 +42,30 @@ async function main() {
     return;
   }
 
-  const count = Math.min(segments.length, newsItems.length);
-  const wordCounts = segments.slice(0, count).map(s => s.split(/\s+/).filter(Boolean).length);
-  const totalWords = wordCounts.reduce((a, b) => a + b, 0);
+  const count = Math.min(storySegments.length, newsItems.length);
 
+  // Word counts for ALL segments (intro + stories) to proportion time correctly
+  const allWordCounts = allSegments.map(s => s.split(/\s+/).filter(Boolean).length);
+  const introWordCount = hasIntro ? allWordCounts[0] : 0;
+  const storyWordCounts = hasIntro ? allWordCounts.slice(1, count + 1) : allWordCounts.slice(0, count);
+  const totalWords = allWordCounts.reduce((a, b) => a + b, 0);
+
+  // itemCount includes the blank intro slide (if any) + story slides
+  const itemCount = count + (hasIntro ? 1 : 0);
   // Compensate for transition overlaps so the video matches audio length
-  const totalTransitionFrames = Math.max(0, count - 1) * TRANSITION_FRAMES;
+  const totalTransitionFrames = Math.max(0, itemCount - 1) * TRANSITION_FRAMES;
   const availableFrames = Math.ceil(totalDuration * FPS) + totalTransitionFrames;
 
   fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
   const items = [];
+
+  // Blank intro slide — shown while the anchor reads the opening/teaser
+  if (hasIntro && introWordCount > 0) {
+    const introFrames = Math.max(FPS, Math.round((introWordCount / totalWords) * availableFrames));
+    items.push({ imagePath: null, durationInFrames: introFrames });
+  }
+
   for (let i = 0; i < count; i++) {
     const newsItem = newsItems[i];
     if (!newsItem.image) continue;
@@ -63,7 +82,7 @@ async function main() {
       continue;
     }
 
-    const durationInFrames = Math.max(FPS, Math.round((wordCounts[i] / totalWords) * availableFrames));
+    const durationInFrames = Math.max(FPS, Math.round((storyWordCounts[i] / totalWords) * availableFrames));
     items.push({ imagePath: localName, durationInFrames });
   }
 
