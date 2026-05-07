@@ -79,8 +79,14 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Cache Remotion node_modules
+      uses: actions/cache@v4
+      with:
+        path: remotion/node_modules
+        key: remotion-${{ hashFiles('remotion/package-lock.json') }}
+
     - name: Install Remotion dependencies
-      run: npm install
+      run: npm ci
       working-directory: remotion
 
     - name: Build background video
