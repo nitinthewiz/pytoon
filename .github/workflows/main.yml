@@ -79,6 +79,12 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Cache Remotion Chrome Headless Shell
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\remotion
+        key: remotion-chrome-${{ hashFiles('remotion/package-lock.json') }}
+
     - name: Cache Remotion node_modules
       id: cache-remotion
       uses: actions/cache@v4
