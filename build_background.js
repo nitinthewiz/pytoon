@@ -106,7 +106,7 @@ async function main() {
 
   console.log('Rendering captions overlay...');
   execSync(
-    `npx remotion render src/index.tsx CaptionsOverlay ../captions_overlay.webm ${renderFlags} --transparent --codec=vp9`,
+    `npx remotion render src/index.tsx CaptionsOverlay ../captions_overlay.mp4 ${renderFlags}`,
     { cwd: remotionDir, stdio: 'inherit' }
   );
 

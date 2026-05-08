@@ -23,7 +23,7 @@ export const CaptionsOverlay: React.FC<Props> = ({ captions }) => {
   const activePage = pages.findLast((p) => p.startMs <= timeMs) ?? null;
 
   return (
-    <AbsoluteFill style={{ backgroundColor: 'transparent' }}>
+    <AbsoluteFill style={{ backgroundColor: '#00FF00' }}>
       {activePage && (
         <div
           style={{
