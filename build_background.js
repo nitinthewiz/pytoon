@@ -95,13 +95,22 @@ async function main() {
 
   fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions }, null, 2));
 
+  const remotionDir = path.join(__dirname, 'remotion');
+  const renderFlags = '--props=../render-props.json --overwrite';
+
   console.log(`Rendering background video: ${items.length} images, ~${totalDuration.toFixed(1)}s`);
   execSync(
-    `npx remotion render src/index.tsx NewsSlideshow ../background_video.mp4 --props=../render-props.json --overwrite`,
-    { cwd: path.join(__dirname, 'remotion'), stdio: 'inherit' }
+    `npx remotion render src/index.tsx NewsSlideshow ../background_video.mp4 ${renderFlags}`,
+    { cwd: remotionDir, stdio: 'inherit' }
   );
 
-  console.log('Background video created.');
+  console.log('Rendering captions overlay...');
+  execSync(
+    `npx remotion render src/index.tsx CaptionsOverlay ../captions_overlay.webm ${renderFlags} --transparent`,
+    { cwd: remotionDir, stdio: 'inherit' }
+  );
+
+  console.log('Background video and captions overlay created.');
 }
 
 function buildCaptionsFromText(text, totalDurationMs) {

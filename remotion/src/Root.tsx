@@ -1,6 +1,7 @@
 import React from 'react';
 import { Composition } from 'remotion';
 import { NewsSlideshow, type Props } from './NewsSlideshow';
+import { CaptionsOverlay } from './CaptionsOverlay';
 
 const TRANSITION_FRAMES = 15;
 
@@ -9,22 +10,36 @@ const DEFAULT_PROPS: Props = {
   captions: [],
 };
 
+const calculateMetadata = async ({ props }: { props: Props }) => {
+  const total =
+    props.items.reduce((sum, item) => sum + item.durationInFrames, 0) -
+    Math.max(0, props.items.length - 1) * TRANSITION_FRAMES;
+  return { durationInFrames: Math.max(1, total) };
+};
+
 export const Root: React.FC = () => {
   return (
-    <Composition
-      id="NewsSlideshow"
-      component={NewsSlideshow}
-      durationInFrames={90}
-      fps={30}
-      width={1792}
-      height={2688}
-      defaultProps={DEFAULT_PROPS}
-      calculateMetadata={async ({ props }) => {
-        const total =
-          props.items.reduce((sum, item) => sum + item.durationInFrames, 0) -
-          Math.max(0, props.items.length - 1) * TRANSITION_FRAMES;
-        return { durationInFrames: Math.max(1, total) };
-      }}
-    />
+    <>
+      <Composition
+        id="NewsSlideshow"
+        component={NewsSlideshow}
+        durationInFrames={90}
+        fps={30}
+        width={1792}
+        height={2688}
+        defaultProps={DEFAULT_PROPS}
+        calculateMetadata={calculateMetadata}
+      />
+      <Composition
+        id="CaptionsOverlay"
+        component={CaptionsOverlay}
+        durationInFrames={90}
+        fps={30}
+        width={1792}
+        height={2688}
+        defaultProps={DEFAULT_PROPS}
+        calculateMetadata={calculateMetadata}
+      />
+    </>
   );
 };

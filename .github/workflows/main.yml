@@ -109,6 +109,13 @@ jobs:
       run: |
         python main.py
 
+    - name: Composite captions overlay onto animation
+      if: ${{ inputs.news_b64 != '' }}
+      shell: pwsh
+      run: |
+        ffmpeg -i animation.mp4 -i captions_overlay.webm -filter_complex "[1:v]format=rgba[cap];[0:v][cap]overlay=0:0[out]" -map "[out]" -map 0:a -c:v libx264 -preset fast -crf 22 -c:a copy final.mp4
+        Move-Item -Force final.mp4 animation.mp4
+
     - name: Upload animation to github actions results
       uses: actions/upload-artifact@v4
       with:
