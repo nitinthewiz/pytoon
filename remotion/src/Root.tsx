@@ -6,6 +6,7 @@ const TRANSITION_FRAMES = 15;
 
 const DEFAULT_PROPS: Props = {
   items: [{ imagePath: 'images/placeholder.jpg', durationInFrames: 90 }],
+  captions: [],
 };
 
 export const Root: React.FC = () => {

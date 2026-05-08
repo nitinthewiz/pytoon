@@ -91,7 +91,9 @@ async function main() {
     return;
   }
 
-  fs.writeFileSync(PROPS_FILE, JSON.stringify({ items }, null, 2));
+  const captions = buildCaptionsFromText(speechText, totalDuration * 1000);
+
+  fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions }, null, 2));
 
   console.log(`Rendering background video: ${items.length} images, ~${totalDuration.toFixed(1)}s`);
   execSync(
@@ -100,6 +102,21 @@ async function main() {
   );
 
   console.log('Background video created.');
+}
+
+function buildCaptionsFromText(text, totalDurationMs) {
+  const clean = text.replace(/\[ITEM\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = clean.split(' ').filter(Boolean);
+  if (words.length === 0) return [];
+
+  const msPerWord = totalDurationMs / words.length;
+  return words.map((word, i) => ({
+    text: i === 0 ? word : ` ${word}`,
+    startMs: i * msPerWord,
+    endMs: (i + 1) * msPerWord,
+    timestampMs: (i + 0.5) * msPerWord,
+    confidence: 1,
+  }));
 }
 
 function getAudioDuration(audioPath) {

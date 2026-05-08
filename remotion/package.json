@@ -6,6 +6,7 @@
     "render": "remotion render"
   },
   "dependencies": {
+    "@remotion/captions": "4.0.458",
     "@remotion/cli": "^4.0.0",
     "@remotion/transitions": "^4.0.0",
     "remotion": "^4.0.0",
