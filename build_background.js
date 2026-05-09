@@ -23,13 +23,21 @@ async function main() {
   const newsItems = JSON.parse(fs.readFileSync(NEWS_JSON, 'utf8'));
   const speechText = fs.readFileSync(SPEECH_TXT, 'utf8');
 
-  // Split on [ITEM]. If speech starts with intro text before the first [ITEM],
+  // Split on [ITEM] or [ITEM:N]. If speech starts with intro text before the first marker,
   // segments[0] is that intro — it should show a blank slide, not a news image.
-  const allSegments = speechText.split('[ITEM]').map(s => s.trim()).filter(Boolean);
+  // [ITEM:N] carries a 1-based index into newsItems so images match even when the LLM
+  // reorders or skips stories.
+  const ITEM_RE = /\[ITEM(?::(\d+))?\]/g;
+  const itemMatches = [...speechText.matchAll(ITEM_RE)];
+  // 0-based indices into newsItems; null means fall back to sequential
+  const itemNewsIndices = itemMatches.map(m => (m[1] != null ? parseInt(m[1]) - 1 : null));
 
-  const hasIntro = !speechText.trimStart().startsWith('[ITEM]');
+  const allSegments = speechText.split(/\[ITEM(?::\d+)?\]/).map(s => s.trim()).filter(Boolean);
+
+  const hasIntro = !speechText.trimStart().startsWith('[ITEM');
   const introSegment = hasIntro ? allSegments[0] : null;
   const storySegments = hasIntro ? allSegments.slice(1) : allSegments;
+  const storyNewsIndices = itemNewsIndices;
 
   if (storySegments.length === 0 || newsItems.length === 0) {
     console.log('No story segments or news items — using existing background_video.mp4');
@@ -67,7 +75,10 @@ async function main() {
   }
 
   for (let i = 0; i < count; i++) {
-    const newsItem = newsItems[i];
+    // Use the [ITEM:N] index if present, otherwise fall back to sequential
+    const newsIdx = storyNewsIndices[i] != null ? storyNewsIndices[i] : i;
+    const clampedIdx = Math.min(newsIdx, newsItems.length - 1);
+    const newsItem = newsItems[clampedIdx];
     if (!newsItem.image) continue;
 
     const ext = detectExtension(newsItem.image);
@@ -114,7 +125,7 @@ async function main() {
 }
 
 function buildCaptionsFromText(text, totalDurationMs) {
-  const clean = text.replace(/\[ITEM\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = text.replace(/\[ITEM(?::\d+)?\]/g, ' ').replace(/\s+/g, ' ').trim();
   const words = clean.split(' ').filter(Boolean);
   if (words.length === 0) return [];
 
