@@ -79,7 +79,12 @@ async function main() {
     const newsIdx = storyNewsIndices[i] != null ? storyNewsIndices[i] : i;
     const clampedIdx = Math.min(newsIdx, newsItems.length - 1);
     const newsItem = newsItems[clampedIdx];
-    if (!newsItem.image) continue;
+    const durationInFrames = Math.max(FPS, Math.round((storyWordCounts[i] / totalWords) * availableFrames));
+
+    if (!newsItem.image) {
+      items.push({ imagePath: null, durationInFrames });
+      continue;
+    }
 
     const ext = detectExtension(newsItem.image);
     const localName = `images/${i}${ext}`;
@@ -89,11 +94,11 @@ async function main() {
       console.log(`Downloading image ${i + 1}/${count}: ${newsItem.image}`);
       await downloadImage(newsItem.image, localPath);
     } catch (err) {
-      console.warn(`  Failed to download image ${i}: ${err.message} — skipping`);
+      console.warn(`  Failed to download image ${i}: ${err.message} — showing blank slide`);
+      items.push({ imagePath: null, durationInFrames });
       continue;
     }
 
-    const durationInFrames = Math.max(FPS, Math.round((storyWordCounts[i] / totalWords) * availableFrames));
     items.push({ imagePath: localName, durationInFrames });
   }
 
@@ -129,14 +134,28 @@ function buildCaptionsFromText(text, totalDurationMs) {
   const words = clean.split(' ').filter(Boolean);
   if (words.length === 0) return [];
 
-  const msPerWord = totalDurationMs / words.length;
-  return words.map((word, i) => ({
-    text: i === 0 ? word : ` ${word}`,
-    startMs: i * msPerWord,
-    endMs: (i + 1) * msPerWord,
-    timestampMs: (i + 0.5) * msPerWord,
-    confidence: 1,
-  }));
+  // Give extra time to words followed by punctuation to match Kokoro's pause behaviour.
+  // Sentence-ending punctuation (.!?) gets a larger bonus than mid-sentence (,:;).
+  const units = words.map(w => {
+    if (/[.!?]['"]?$/.test(w)) return 1.6;
+    if (/[,;:]$/.test(w)) return 1.25;
+    return 1;
+  });
+  const totalUnits = units.reduce((a, b) => a + b, 0);
+  const msPerUnit = totalDurationMs / totalUnits;
+
+  let elapsed = 0;
+  return words.map((word, i) => {
+    const startMs = elapsed;
+    elapsed += units[i] * msPerUnit;
+    return {
+      text: i === 0 ? word : ` ${word}`,
+      startMs,
+      endMs: elapsed,
+      timestampMs: (startMs + elapsed) / 2,
+      confidence: 1,
+    };
+  });
 }
 
 function getAudioDuration(audioPath) {
