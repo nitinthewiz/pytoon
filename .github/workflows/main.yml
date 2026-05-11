@@ -18,6 +18,10 @@ on:
         description: 'Base64-encoded speech text with [ITEM] delimiters'
         required: false
         default: ''
+      captions_b64:
+        description: 'Base64-encoded word timestamps JSON from Kokoro TTS'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -73,6 +77,15 @@ jobs:
       run: |
         $bytes = [System.Convert]::FromBase64String($env:SPEECH_B64)
         [System.IO.File]::WriteAllBytes((Join-Path $PWD 'speech.txt'), $bytes)
+
+    - name: Decode captions timestamps
+      if: ${{ inputs.captions_b64 != '' }}
+      shell: pwsh
+      env:
+        CAPTIONS_B64: ${{ inputs.captions_b64 }}
+      run: |
+        $bytes = [System.Convert]::FromBase64String($env:CAPTIONS_B64)
+        [System.IO.File]::WriteAllBytes((Join-Path $PWD 'captions.json'), $bytes)
 
     - name: Set up Node.js
       uses: actions/setup-node@v6

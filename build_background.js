@@ -10,6 +10,7 @@ const AUDIO_FILE = path.join(__dirname, 'speech.mp3');
 const OUTPUT_VIDEO = path.join(__dirname, 'background_video.mp4');
 const IMAGE_DIR = path.join(__dirname, 'remotion', 'public', 'images');
 const PROPS_FILE = path.join(__dirname, 'render-props.json');
+const CAPTIONS_JSON = path.join(__dirname, 'captions.json');
 
 const FPS = 30;
 const TRANSITION_FRAMES = 15;
@@ -107,7 +108,9 @@ async function main() {
     return;
   }
 
-  const captions = buildCaptionsFromText(speechText, totalDuration * 1000);
+  const captions = fs.existsSync(CAPTIONS_JSON)
+    ? buildCaptionsFromKokoro(JSON.parse(fs.readFileSync(CAPTIONS_JSON, 'utf8')))
+    : buildCaptionsFromText(speechText, totalDuration * 1000);
 
   fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions }, null, 2));
 
@@ -127,6 +130,18 @@ async function main() {
   );
 
   console.log('Background video and captions overlay created.');
+}
+
+function buildCaptionsFromKokoro(timestamps) {
+  // Kokoro returns punctuation as separate tokens — filter to real words only.
+  const words = timestamps.filter(t => /\w/.test(t.word));
+  return words.map((t, i) => ({
+    text: i === 0 ? t.word : ` ${t.word}`,
+    startMs: t.start_time * 1000,
+    endMs: t.end_time * 1000,
+    timestampMs: (t.start_time + t.end_time) / 2 * 1000,
+    confidence: 1,
+  }));
 }
 
 function buildCaptionsFromText(text, totalDurationMs) {
