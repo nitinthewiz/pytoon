@@ -53,26 +53,33 @@ async function main() {
 
   const count = Math.min(storySegments.length, newsItems.length);
 
-  // Word counts for ALL segments (intro + stories) to proportion time correctly
-  const allWordCounts = allSegments.map(s => s.split(/\s+/).filter(Boolean).length);
-  const introWordCount = hasIntro ? allWordCounts[0] : 0;
-  const storyWordCounts = hasIntro ? allWordCounts.slice(1, count + 1) : allWordCounts.slice(0, count);
-  const totalWords = allWordCounts.reduce((a, b) => a + b, 0);
-
   // itemCount includes the blank intro slide (if any) + story slides
   const itemCount = count + (hasIntro ? 1 : 0);
-  // Compensate for transition overlaps so the video matches audio length
-  const totalTransitionFrames = Math.max(0, itemCount - 1) * TRANSITION_FRAMES;
-  const availableFrames = Math.ceil(totalDuration * FPS) + totalTransitionFrames;
+
+  // Compute per-slide durations — use Kokoro timestamps when available for precision,
+  // otherwise fall back to word-count proportional estimation.
+  const kokoroTimestamps = fs.existsSync(CAPTIONS_JSON)
+    ? JSON.parse(fs.readFileSync(CAPTIONS_JSON, 'utf8'))
+    : null;
+
+  // activeSegments: the text segments that map to actual slides (intro + stories[0..count-1])
+  const activeSegments = [
+    ...(hasIntro ? [allSegments[0]] : []),
+    ...storySegments.slice(0, count),
+  ];
+  const segmentDurations = computeSegmentDurations(
+    kokoroTimestamps, activeSegments, totalDuration, itemCount
+  );
+  // segmentDurations[0] = intro (when hasIntro), then stories follow in order
 
   fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
   const items = [];
 
   // Blank intro slide — shown while the anchor reads the opening/teaser
+  const introWordCount = hasIntro ? allSegments[0].split(/\s+/).filter(Boolean).length : 0;
   if (hasIntro && introWordCount > 0) {
-    const introFrames = Math.max(FPS, Math.round((introWordCount / totalWords) * availableFrames));
-    items.push({ imagePath: null, durationInFrames: introFrames });
+    items.push({ imagePath: null, durationInFrames: segmentDurations[0] });
   }
 
   for (let i = 0; i < count; i++) {
@@ -80,7 +87,7 @@ async function main() {
     const newsIdx = storyNewsIndices[i] != null ? storyNewsIndices[i] : i;
     const clampedIdx = Math.min(newsIdx, newsItems.length - 1);
     const newsItem = newsItems[clampedIdx];
-    const durationInFrames = Math.max(FPS, Math.round((storyWordCounts[i] / totalWords) * availableFrames));
+    const durationInFrames = segmentDurations[hasIntro ? i + 1 : i];
 
     if (!newsItem.image) {
       items.push({ imagePath: null, durationInFrames });
@@ -130,6 +137,43 @@ async function main() {
   );
 
   console.log('Background video and captions overlay created.');
+}
+
+// Derive per-slide durations from Kokoro word timestamps.
+// Uses cumulative word count to map each segment's first word to its token index,
+// then measures the actual elapsed time between segment boundaries.
+// Falls back to word-count proportional estimation when timestamps are unavailable.
+function computeSegmentDurations(timestamps, segments, totalDuration, itemCount) {
+  const totalTransitionFrames = Math.max(0, itemCount - 1) * TRANSITION_FRAMES;
+  const availableFrames = Math.ceil(totalDuration * FPS) + totalTransitionFrames;
+
+  if (!timestamps || timestamps.length === 0) {
+    const totalWords = segments.reduce((s, seg) => s + seg.split(/\s+/).filter(Boolean).length, 0);
+    return segments.map(seg => {
+      const wc = seg.split(/\s+/).filter(Boolean).length;
+      return Math.max(FPS, Math.round((wc / totalWords) * availableFrames));
+    });
+  }
+
+  // Filter to word tokens (Kokoro emits punctuation as separate tokens)
+  const wordTokens = timestamps.filter(t => /\w/.test(t.word));
+
+  // Walk each segment, recording the token index where it starts
+  let wordIdx = 0;
+  const segStartSecs = segments.map(seg => {
+    const startSec = wordTokens[Math.min(wordIdx, wordTokens.length - 1)]?.start_time ?? 0;
+    wordIdx += seg.split(/\s+/).filter(Boolean).length;
+    return startSec;
+  });
+
+  return segStartSecs.map((startSec, i) => {
+    const endSec = i + 1 < segStartSecs.length ? segStartSecs[i + 1] : totalDuration;
+    const visibleFrames = Math.round((endSec - startSec) * FPS);
+    // Add transition overlap frames to every slide except the last so the video
+    // duration stays in sync with the audio even while slides crossfade.
+    const transitionBonus = i < segments.length - 1 ? TRANSITION_FRAMES : 0;
+    return Math.max(FPS, visibleFrames + transitionBonus);
+  });
 }
 
 function buildCaptionsFromKokoro(timestamps) {
