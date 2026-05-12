@@ -1,9 +1,17 @@
+import os
+import re
 from pytoon.animator import animate
 from moviepy.editor import VideoFileClip
 
-# Create a PyToon animation without providing a transcript
+# Use the speech text as the transcript so forcealign doesn't run speech-to-text.
+transcript = None
+if os.path.exists("speech.txt"):
+    raw = open("speech.txt", encoding="utf-8").read()
+    transcript = re.sub(r'\[ITEM(?::\d+)?\]', ' ', raw).strip()
+
 animation = animate(
-    audio_file="speech.mp3"  # Input audio (transcript will be auto-generated)
+    audio_file="speech.mp3",
+    transcript=transcript,
 )
 
 # Overlay the animation on top of another video and save as an .mp4 file.
