@@ -116,7 +116,7 @@ async function main() {
   }
 
   const captions = fs.existsSync(CAPTIONS_JSON)
-    ? buildCaptionsFromKokoro(JSON.parse(fs.readFileSync(CAPTIONS_JSON, 'utf8')))
+    ? buildCaptionsFromKokoroWithText(JSON.parse(fs.readFileSync(CAPTIONS_JSON, 'utf8')), speechText)
     : buildCaptionsFromText(speechText, totalDuration * 1000);
 
   fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions }, null, 2));
@@ -176,16 +176,58 @@ function computeSegmentDurations(timestamps, segments, totalDuration, itemCount)
   });
 }
 
-function buildCaptionsFromKokoro(timestamps) {
-  // Kokoro returns punctuation as separate tokens — filter to real words only.
-  const words = timestamps.filter(t => /\w/.test(t.word));
-  return words.map((t, i) => ({
-    text: i === 0 ? t.word : ` ${t.word}`,
-    startMs: t.start_time * 1000,
-    endMs: t.end_time * 1000,
-    timestampMs: (t.start_time + t.end_time) / 2 * 1000,
-    confidence: 1,
-  }));
+// Build captions using original speech text for display (preserving numbers like "2026"
+// and punctuation like commas) but Kokoro token timestamps for timing.
+//
+// Kokoro expands numbers to spoken words ("2026" → "twenty twenty six"), so its tokens
+// don't map 1-to-1 with original words. For words containing digits we greedily consume
+// Kokoro tokens until the next original word is recognised, spanning all the expansion
+// tokens and using their combined start→end as the display timing for that one word.
+function buildCaptionsFromKokoroWithText(timestamps, speechText) {
+  const clean = speechText.replace(/\[ITEM(?::\d+)?\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const origWords = clean.split(' ').filter(Boolean);
+  if (origWords.length === 0) return [];
+
+  // Only word tokens (no punctuation) — used purely for timing
+  const wordToks = timestamps.filter(t => /\w/.test(t.word));
+  if (wordToks.length === 0) return [];
+
+  const result = [];
+  let ti = 0;
+
+  for (let wi = 0; wi < origWords.length; wi++) {
+    if (ti >= wordToks.length) break;
+
+    const origWord = origWords[wi];
+    const startMs = wordToks[ti].start_time * 1000;
+    let endMs = wordToks[ti].end_time * 1000;
+
+    if (/\d/.test(origWord) && wi + 1 < origWords.length) {
+      // This word contains digits — Kokoro will have expanded it to multiple tokens.
+      // Consume tokens until we find the start of the next original word.
+      const nextBase = origWords[wi + 1].replace(/[^a-zA-Z]/g, '').toLowerCase();
+      const prefixLen = Math.min(nextBase.length, 4);
+      ti++;
+      while (ti < wordToks.length) {
+        const tok = wordToks[ti].word.toLowerCase().replace(/[^a-z]/g, '');
+        if (tok === nextBase || (prefixLen >= 2 && tok.startsWith(nextBase.slice(0, prefixLen)))) break;
+        endMs = wordToks[ti].end_time * 1000;
+        ti++;
+      }
+    } else {
+      ti++;
+    }
+
+    result.push({
+      text: wi === 0 ? origWord : ` ${origWord}`,
+      startMs,
+      endMs,
+      timestampMs: (startMs + endMs) / 2,
+      confidence: 1,
+    });
+  }
+
+  return result;
 }
 
 function buildCaptionsFromText(text, totalDurationMs) {

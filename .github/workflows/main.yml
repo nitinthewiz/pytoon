@@ -44,7 +44,7 @@ jobs:
 
     - name: Install moviepy and audioop
       run: |
-        pip install moviepy==1.0.3 audioop-lts==0.2.1
+        pip install moviepy==1.0.3 audioop-lts==0.2.1 num2words
 
     - name: Install dependencies
       run: |
