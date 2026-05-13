@@ -44,6 +44,15 @@ A running log of choices made in the pipeline and options that were considered b
 
 **Alternative:** forcealign library for post-hoc alignment. Still used for the mouth-sync animation (pytoon), but Kokoro timestamps are better for caption display since they're available at TTS time.
 
+### Caption alignment: greedy lookahead algorithm (`buildCaptionsFromKokoroWithText`)
+
+Kokoro's token stream doesn't map 1-to-1 with the original speech text because it expands numbers to spoken words ("2026" → "twenty", "twenty", "six") and emits punctuation as separate tokens. The function walks `origWords` (from the plain speech text) and `wordToks` (Kokoro tokens filtered to those containing `\w`) in parallel:
+
+- **Normal word:** advance `ti` by 1. The token's `start_time`/`end_time` becomes the caption timing.
+- **Digit word** (e.g. "2026", "13th"): Kokoro will have emitted multiple tokens for it. Advance `ti` by 1 to consume the first expansion token, then **greedily consume** further tokens until the next original word is recognised in the token stream — accumulating `endMs` as we go. That gives one caption entry spanning all the expansion tokens.
+
+**Critical edge case — consecutive digit words** (e.g. "13th, 2026"): The lookahead target for "13th," is "2026.", which has no alphabetic characters after stripping punctuation (`nextBase = ""`). A `nextBase` of length < 2 means the while-loop condition can never be satisfied, so it would consume every remaining token and kill all subsequent captions. **Fix:** the greedy while loop is skipped entirely when `prefixLen < 2`; "13th," is mapped to just its first Kokoro token ("thirteenth"), accepting slightly imprecise timing for that word in exchange for captions continuing normally.
+
 ---
 
 ## Slide transition timing
