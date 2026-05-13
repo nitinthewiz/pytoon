@@ -33,15 +33,20 @@ class animate:
     """Animates a cartoon that is lip synced to provieded audio voiceover."""
 
     def __init__(self, audio_file: str, transcript: str = None, fps: int = 48,
-                 emotion_schedule: list = None):
+                 emotion_schedule: list = None, allowed_emotions: list = None):
         """
         Args:
             audio_file: Path to audio file (.mp3 or .wav).
             transcript: Optional transcript string. Auto-generated if omitted.
             fps: Frames per second for output video.
             emotion_schedule: Optional list of (start_sec, end_sec, emotion_name) tuples.
-                Supported emotions: explain, happy, rhetorical, sad, angry.
-                Frames outside all ranges fall back to random emotion selection.
+                Any emotion from the full set may be used here regardless of
+                allowed_emotions, since scheduled emotions are explicit choices.
+                Supported: explain, happy, rhetorical, sad, angry, confused.
+            allowed_emotions: List of emotion names the random fallback may pick
+                from when no schedule entry covers a frame. Defaults to
+                ['explain', 'happy', 'rhetorical'] to preserve original behaviour.
+                Pass a wider list (e.g. adding 'confused') for non-news contexts.
         """
         self.audio_file = audio_file
         self.sequence = FrameSequence()
@@ -49,6 +54,7 @@ class animate:
         self.fps = fps
         self.final_frames = []
         self.emotion_schedule = emotion_schedule or []
+        self.allowed_emotions = allowed_emotions or ['explain', 'happy', 'rhetorical']
 
         # Initialize blinking rate (blink every 3 seconds)
         self.blink_rate = 3.0
@@ -163,14 +169,15 @@ class animate:
                 frame_idx += len(word_viseme.visemes)
 
     def random_emotion(self):
-        """Generates a random emotion to use in sequence
+        """Returns poses for a randomly chosen emotion from allowed_emotions.
 
         Returns:
-            list[Pose]: List of poses from a random emotion
+            list[Pose]: List of poses from a randomly selected allowed emotion.
         """
-        emotions_list = list(self.assets.__dict__.keys())
-        emotion = random.choice(emotions_list)
-        return getattr(self.assets, emotion)
+        available = [e for e in self.allowed_emotions if hasattr(self.assets, e)]
+        if not available:
+            available = list(self.assets.__dict__.keys())
+        return getattr(self.assets, random.choice(available))
 
     def get_frame_size(self):
         pose_image = cv2.imread(self.sequence.pose_files[0])

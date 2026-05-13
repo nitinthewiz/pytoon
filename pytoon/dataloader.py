@@ -32,27 +32,30 @@ class Emotions:
     rhetorical: list[Pose]
     sad: list[Pose]
     angry: list[Pose]
+    confused: list[Pose]
 
 
 def get_assets() -> Emotions:
-    """Loads pose data from json file and returns as a dictionary.
+    """Loads all emotion pose data from pose_data.json.
+
+    Returns the full set of emotions unconditionally. Callers control which
+    emotions are used for random selection via animate(allowed_emotions=...).
 
     Returns:
-        dict: Pose data, including paths to images, emotion specific poses, and mouth coords.
+        Emotions: All available emotion pose sets.
     """
     pose_data = read_json(file="pose_data.json")["emotions"]
 
     emotions = {}
     for emotion in pose_data.keys():
-        if emotion not in ["confused"]:
-            poses = []
-            for i, _ in enumerate(pose_data[emotion]):
-                images = deepcopy(pose_data[emotion][i]["image_files"])
-                coords = deepcopy(pose_data[emotion][i]["mouth_coordinates"])
-                pose = {
-                    "image_files": images,
-                    "mouth_coordinates": MouthCoordinates(**coords),
-                }
-                poses.append(Pose(**pose))
-            emotions[emotion] = poses
+        poses = []
+        for i, _ in enumerate(pose_data[emotion]):
+            images = deepcopy(pose_data[emotion][i]["image_files"])
+            coords = deepcopy(pose_data[emotion][i]["mouth_coordinates"])
+            pose = {
+                "image_files": images,
+                "mouth_coordinates": MouthCoordinates(**coords),
+            }
+            poses.append(Pose(**pose))
+        emotions[emotion] = poses
     return Emotions(**emotions)
