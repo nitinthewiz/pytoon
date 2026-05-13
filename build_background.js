@@ -208,11 +208,16 @@ function buildCaptionsFromKokoroWithText(timestamps, speechText) {
       const nextBase = origWords[wi + 1].replace(/[^a-zA-Z]/g, '').toLowerCase();
       const prefixLen = Math.min(nextBase.length, 4);
       ti++;
-      while (ti < wordToks.length) {
-        const tok = wordToks[ti].word.toLowerCase().replace(/[^a-z]/g, '');
-        if (tok === nextBase || (prefixLen >= 2 && tok.startsWith(nextBase.slice(0, prefixLen)))) break;
-        endMs = wordToks[ti].end_time * 1000;
-        ti++;
+      // Only greedily consume when the next word has recognisable alpha content.
+      // If nextBase is empty (next word is also a digit/punctuation), the while loop
+      // would never break and consume every remaining token — killing all captions.
+      if (prefixLen >= 2) {
+        while (ti < wordToks.length) {
+          const tok = wordToks[ti].word.toLowerCase().replace(/[^a-z]/g, '');
+          if (tok === nextBase || tok.startsWith(nextBase.slice(0, prefixLen))) break;
+          endMs = wordToks[ti].end_time * 1000;
+          ti++;
+        }
       }
     } else {
       ti++;
