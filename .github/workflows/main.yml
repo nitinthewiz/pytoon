@@ -22,6 +22,10 @@ on:
         description: 'Base64-encoded word timestamps JSON from Kokoro TTS'
         required: false
         default: ''
+      emotions_b64:
+        description: 'Base64-encoded JSON array of emotion strings, one per story'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -37,10 +41,10 @@ jobs:
         python-version: '3.13'
         cache: 'pip'
 
-    - name: Install pytoon
+    - name: Install pytoon from local source
       run: |
         python -m pip install --upgrade pip
-        pip install pytoon
+        pip install -e .
 
     - name: Install moviepy and audioop
       run: |
@@ -86,6 +90,15 @@ jobs:
       run: |
         $bytes = [System.Convert]::FromBase64String($env:CAPTIONS_B64)
         [System.IO.File]::WriteAllBytes((Join-Path $PWD 'captions.json'), $bytes)
+
+    - name: Decode emotions
+      if: ${{ inputs.emotions_b64 != '' }}
+      shell: pwsh
+      env:
+        EMOTIONS_B64: ${{ inputs.emotions_b64 }}
+      run: |
+        $bytes = [System.Convert]::FromBase64String($env:EMOTIONS_B64)
+        [System.IO.File]::WriteAllBytes((Join-Path $PWD 'emotions.json'), $bytes)
 
     - name: Set up Node.js
       uses: actions/setup-node@v6

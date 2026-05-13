@@ -27,13 +27,11 @@ class Pose:
 class Emotions:
     """Data class for storing emotion specific poses"""
 
-    explain: list[Pose]  # List of poses for the explain emotion.
-    happy: list[Pose]  # List os poses for the happy emotion.
-    rhetorical: list[Pose]  # List of poses for the sad emotion.
-
-#sad: list[Pose]  # List of poses for the sad emotion.
-#angry: list[Pose]  # List of poses for the sad emotion.
-#confused: list[Pose]  # List of poses for the sad emotion.
+    explain: list[Pose]
+    happy: list[Pose]
+    rhetorical: list[Pose]
+    sad: list[Pose]
+    angry: list[Pose]
 
 
 def get_assets() -> Emotions:
@@ -46,7 +44,7 @@ def get_assets() -> Emotions:
 
     emotions = {}
     for emotion in pose_data.keys():
-        if emotion not in ["sad", "angry", "confused"]:
+        if emotion not in ["confused"]:
             poses = []
             for i, _ in enumerate(pose_data[emotion]):
                 images = deepcopy(pose_data[emotion][i]["image_files"])

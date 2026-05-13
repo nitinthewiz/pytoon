@@ -25,15 +25,30 @@ class FrameSequence:
         self.pose_changes = []
 
 
+# Emotions that use the negative (downturned) viseme set
+_NEGATIVE_EMOTIONS = {'sad', 'angry'}
+
+
 class animate:
     """Animates a cartoon that is lip synced to provieded audio voiceover."""
 
-    def __init__(self, audio_file: str, transcript: str = None, fps: int = 48):
+    def __init__(self, audio_file: str, transcript: str = None, fps: int = 48,
+                 emotion_schedule: list = None):
+        """
+        Args:
+            audio_file: Path to audio file (.mp3 or .wav).
+            transcript: Optional transcript string. Auto-generated if omitted.
+            fps: Frames per second for output video.
+            emotion_schedule: Optional list of (start_sec, end_sec, emotion_name) tuples.
+                Supported emotions: explain, happy, rhetorical, sad, angry.
+                Frames outside all ranges fall back to random emotion selection.
+        """
         self.audio_file = audio_file
         self.sequence = FrameSequence()
         self.assets = get_assets()
         self.fps = fps
         self.final_frames = []
+        self.emotion_schedule = emotion_schedule or []
 
         # Initialize blinking rate (blink every 3 seconds)
         self.blink_rate = 3.0
@@ -52,16 +67,28 @@ class animate:
         # Create the animation
         self.compile_animation()
 
+    def _scheduled_emotion(self, frame_idx):
+        """Return the scheduled emotion poses for a frame, or None to use random."""
+        if not self.emotion_schedule:
+            return None
+        t = frame_idx / self.fps
+        for start_sec, end_sec, emotion_name in self.emotion_schedule:
+            if start_sec <= t < end_sec:
+                poses = getattr(self.assets, emotion_name, None)
+                if poses:
+                    return poses
+        return None
+
     def build_pose_sequence(self):
         """Creates the sequence of pose images for the video"""
-        emotion = self.random_emotion()
+        emotion = self._scheduled_emotion(0) or self.random_emotion()
         pose = random.choice(emotion)
 
         # Add a character pose frame for every frame of a mouth
         for i, _ in enumerate(self.sequence.mouth_files):
             if self.sequence.pose_changes[i]:
-                # Change the pose of the character
-                emotion = self.random_emotion()
+                # Change the pose at breath points, respecting the emotion schedule
+                emotion = self._scheduled_emotion(i) or self.random_emotion()
                 pose = random.choice(emotion)
 
             eyes = self.blink_manager(idx=i)
@@ -110,24 +137,30 @@ class animate:
 
         return eyes
 
+    def _viseme_dir_at_frame(self, frame_idx):
+        """Return 'negative' for sad/angry scheduled segments, 'positive' otherwise."""
+        if not self.emotion_schedule:
+            return 'positive'
+        t = frame_idx / self.fps
+        for start_sec, end_sec, emotion_name in self.emotion_schedule:
+            if start_sec <= t < end_sec:
+                return 'negative' if emotion_name in _NEGATIVE_EMOTIONS else 'positive'
+        return 'positive'
+
     def build_mouth_sequence(self):
         """Generates a sequence of mouth images for video"""
-        # Add mouth images to mouth image file sequence
-        for i, _ in enumerate(self.viseme_sequence):
-            if self.viseme_sequence[i].visemes:
-                self.sequence.mouth_files.extend(self.viseme_sequence[i].visemes)
-                pose_changes = [0] * len(self.viseme_sequence[i].visemes)
-                if self.viseme_sequence[i].breath:
+        frame_idx = 0
+        assets_dir = os.path.dirname(__file__)
+        for word_viseme in self.viseme_sequence:
+            if word_viseme.visemes:
+                viseme_dir = self._viseme_dir_at_frame(frame_idx)
+                base = f"{assets_dir}/assets/visemes/{viseme_dir}/"
+                self.sequence.mouth_files.extend(base + f for f in word_viseme.visemes)
+                pose_changes = [0] * len(word_viseme.visemes)
+                if word_viseme.breath:
                     pose_changes[0] = 1
-                    self.sequence.pose_changes.extend(pose_changes)
-                else:
-                    self.sequence.pose_changes.extend(pose_changes)
-
-        # Prepend absolute path to mouth images
-        for i, _ in enumerate(self.sequence.mouth_files):
-            file = self.sequence.mouth_files[i]
-            new_file = f"{os.path.dirname(__file__)}/assets/visemes/positive/{file}"
-            self.sequence.mouth_files[i] = new_file
+                self.sequence.pose_changes.extend(pose_changes)
+                frame_idx += len(word_viseme.visemes)
 
     def random_emotion(self):
         """Generates a random emotion to use in sequence
