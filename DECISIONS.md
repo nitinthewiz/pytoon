@@ -83,6 +83,45 @@ Kokoro's token stream doesn't map 1-to-1 with the original speech text because i
 
 ---
 
+## pytoon replacement / lip-sync animation alternatives
+
+**Context:** pytoon hasn't had a commit in ~2 years. Researched alternatives May 2026.
+
+### Architecture split
+
+- **Sprite-based (CPU, cartoon):** pytoon's approach — composites pre-drawn mouth sprites using phoneme timing. Fast, no GPU, but character is fixed.
+- **Neural/diffusion (GPU, photorealistic):** MuseTalk, LatentSync, Wav2Lip etc. — modify actual video pixels to match audio. Require GPU, trained mostly on real human faces.
+
+### Open-source options
+
+| Tool | Type | CPU-only? | Notes |
+|---|---|---|---|
+| **Rhubarb Lip Sync** | Sprite timing only | Yes | MIT, active (Apr 2025). Outputs mouth-shape timing (A–H codes), no renderer included — not end-to-end. |
+| **MuseTalk** (Tencent) | Neural video | No (4GB+ VRAM) | Apache 2.0, active (Mar 2025). Real-time capable at 30fps on modern GPU. Photorealistic only. **Most promising local replacement.** |
+| **LatentSync** (ByteDance) | Neural video | No (8–18GB VRAM) | Apache 2.0, active (Jun 2025). Best open-source quality, some anime support. |
+| **Wav2Lip** | Neural video | Technically, but painfully slow | Frozen since 2020. Best raw sync accuracy but blurry output. |
+| **SadTalker** | Neural video | No | Stale since 2023. Works from a single still image. |
+
+**CPU-only + end-to-end + open-source:** nothing viable. pytoon occupies this niche uniquely because sprite compositing requires no neural inference.
+
+### Commercial / cloud APIs
+
+| Service | Character type | Notes |
+|---|---|---|
+| **Hedra (Character-3)** | Cartoon + photorealistic | Only API explicitly supporting illustrated/cartoon characters. ~$0.45/min. |
+| **Sync.so** | Photorealistic | Built by Wav2Lip creators. $0.04–0.13/sec. Best sync accuracy commercially. |
+| **D-ID** | Photorealistic | Talking head from photo. v4 Mar 2026. |
+
+### Hosted MuseTalk API options (evaluated)
+
+- **chutes.ai** — marketplace model (others host and run). Flaky by design — no SLA, availability depends on third-party hosts. **Ruled out.**
+- **fal.ai** — better reliability than chutes but output was blurry. **Ruled out.**
+- **Replicate (`douwantech/musetalk`)** — worth evaluating. Different hosting model from chutes (Replicate runs the infrastructure themselves). Check whether the model is a different/better version than what fal.ai used.
+
+**Next step:** Test Replicate's MuseTalk model quality. If output is acceptable, Replicate is the preferred hosted path over fal.ai/chutes.
+
+---
+
 ## News API
 
 **Current:** MediaStack free tier (`api.mediastack.com/v1/news`).
