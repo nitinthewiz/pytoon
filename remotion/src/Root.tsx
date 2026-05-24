@@ -1,9 +1,9 @@
 import React from 'react';
 import { Composition } from 'remotion';
-import { NewsSlideshow, type Props } from './NewsSlideshow';
+import { NewsSlideshow } from './NewsSlideshow';
 import { CaptionsOverlay } from './CaptionsOverlay';
-
-const TRANSITION_FRAMES = 15;
+import { type CompositionProps as Props } from './types';
+import { TRANSITION_FRAMES } from './layout';
 
 const DEFAULT_PROPS: Props = {
   items: [{ imagePath: 'images/placeholder.jpg', durationInFrames: 90 }],

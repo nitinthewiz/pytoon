@@ -1,12 +1,10 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import { createTikTokStyleCaptions } from '@remotion/captions';
-import { type Props } from './NewsSlideshow';
+import { CAPTION_TOP } from './layout';
+import { type CompositionProps } from './types';
 
-// Captions sit in the news-image zone, roughly 82% down the 2355 px canvas.
-const CAPTION_TOP = 1940;
-
-export const CaptionsOverlay: React.FC<Props> = ({ captions }) => {
+export const CaptionsOverlay: React.FC<CompositionProps> = ({ captions }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const timeMs = (frame / fps) * 1000;

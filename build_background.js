@@ -75,11 +75,11 @@ async function main() {
   fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
   const items = [];
+  const introSlotIndex = (hasIntro && allSegments[0].split(/\s+/).filter(Boolean).length > 0) ? 0 : -1;
 
-  // Blank intro slide — shown while the anchor reads the opening/teaser
-  const introWordCount = hasIntro ? allSegments[0].split(/\s+/).filter(Boolean).length : 0;
-  if (hasIntro && introWordCount > 0) {
-    items.push({ imagePath: null, durationInFrames: segmentDurations[0] });
+  // Placeholder for the intro teaser — filled in after story images are downloaded
+  if (introSlotIndex === 0) {
+    items.push({ imagePath: null, durationInFrames: segmentDurations[0], teaserImages: [] });
   }
 
   for (let i = 0; i < count; i++) {
@@ -114,6 +114,11 @@ async function main() {
     }
 
     items.push({ imagePath: localName, durationInFrames, ...storyMeta });
+  }
+
+  // Backfill teaserImages on the intro slide with all successfully downloaded story images
+  if (introSlotIndex === 0 && items[0]?.teaserImages != null) {
+    items[0].teaserImages = items.slice(1).map(it => it.imagePath).filter(Boolean);
   }
 
   if (items.length === 0) {
