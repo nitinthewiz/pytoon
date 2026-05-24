@@ -197,15 +197,28 @@ class animate:
                 final_frame = frame
             self.final_frames.append(final_frame)
 
-    def export(self, path: str, background: VideoClip, scale: float = 0.7):
+    def export(self, path: str, background: VideoClip, scale: float = 0.7,
+               position=("right", "bottom"), avatar_width: int = None,
+               avatar_crop_height: int = None):
         animation_clip = ImageSequenceClip(self.final_frames, fps=self.fps, with_mask=True)
-        new_height = int(background.size[1] * scale)
-        new_width = int(animation_clip.w * (new_height / animation_clip.h))
+
+        if avatar_width is not None:
+            new_width = avatar_width
+            new_height = int(animation_clip.h * (new_width / animation_clip.w))
+        else:
+            new_height = int(background.size[1] * scale)
+            new_width = int(animation_clip.w * (new_height / animation_clip.h))
+
         animation_clip = animation_clip.resize(width=new_width, height=new_height)
 
-        # Overlay the animation on top of thee background clip
+        if avatar_crop_height is not None:
+            animation_clip = animation_clip.crop(
+                x1=0, y1=0, x2=new_width, y2=avatar_crop_height
+            )
+
+        # Overlay the animation on top of the background clip
         final_clip = CompositeVideoClip(
-            clips=[background, animation_clip.set_position(("right", "bottom"))], use_bgclip=True
+            clips=[background, animation_clip.set_position(position)], use_bgclip=True
         )
 
         # Add speech audio to clip with 0.2 second delay

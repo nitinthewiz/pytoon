@@ -148,6 +148,13 @@ jobs:
         name: animation.mp4
         path: animation.mp4
 
+    - name: Upload background video for fallback re-use
+      if: ${{ inputs.news_b64 != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: background_video.mp4
+        path: background_video.mp4
+
     - name: Upload video file to telegram using xireiki/channel-post@v1
       if: ${{ success() }}
       uses: xireiki/channel-post@v1

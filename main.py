@@ -119,5 +119,17 @@ animation = animate(
     emotion_schedule=emotion_schedule or None,
 )
 
+# New template: 1080×2355 canvas.
+# Avatar fills the top 782 px — scaled to canvas width so only the upper body
+# (head + torso) is visible, giving the zoomed-in news-anchor look.
+CANVAS_W = 1080
+AVATAR_ZONE_H = 782
+
 background_video = VideoFileClip("background_video.mp4")
-animation.export(path='animation.mp4', background=background_video, scale=0.7)
+animation.export(
+    path='animation.mp4',
+    background=background_video,
+    avatar_width=CANVAS_W,
+    avatar_crop_height=AVATAR_ZONE_H,
+    position=("center", "top"),
+)

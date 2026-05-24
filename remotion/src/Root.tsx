@@ -25,8 +25,8 @@ export const Root: React.FC = () => {
         component={NewsSlideshow}
         durationInFrames={90}
         fps={30}
-        width={1792}
-        height={2688}
+        width={1080}
+        height={2355}
         defaultProps={DEFAULT_PROPS}
         calculateMetadata={calculateMetadata}
       />
@@ -35,8 +35,8 @@ export const Root: React.FC = () => {
         component={CaptionsOverlay}
         durationInFrames={90}
         fps={30}
-        width={1792}
-        height={2688}
+        width={1080}
+        height={2355}
         defaultProps={DEFAULT_PROPS}
         calculateMetadata={calculateMetadata}
       />

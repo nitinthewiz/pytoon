@@ -89,8 +89,14 @@ async function main() {
     const newsItem = newsItems[clampedIdx];
     const durationInFrames = segmentDurations[hasIntro ? i + 1 : i];
 
+    const storyMeta = {
+      title: newsItem.title || '',
+      source: newsItem.source || '',
+      category: newsItem.category || 'Top News',
+    };
+
     if (!newsItem.image) {
-      items.push({ imagePath: null, durationInFrames });
+      items.push({ imagePath: null, durationInFrames, ...storyMeta });
       continue;
     }
 
@@ -103,11 +109,11 @@ async function main() {
       await downloadImage(newsItem.image, localPath);
     } catch (err) {
       console.warn(`  Failed to download image ${i}: ${err.message} — showing blank slide`);
-      items.push({ imagePath: null, durationInFrames });
+      items.push({ imagePath: null, durationInFrames, ...storyMeta });
       continue;
     }
 
-    items.push({ imagePath: localName, durationInFrames });
+    items.push({ imagePath: localName, durationInFrames, ...storyMeta });
   }
 
   if (items.length === 0) {
