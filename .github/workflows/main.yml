@@ -139,8 +139,12 @@ jobs:
       if: ${{ inputs.news_b64 != '' }}
       shell: pwsh
       run: |
-        ffmpeg -i animation.mp4 -i captions_overlay.mp4 -filter_complex "[1:v]fps=48,colorkey=color=0x00FF00:similarity=0.4:blend=0.1[cap];[0:v][cap]overlay=0:0[out]" -map "[out]" -map 0:a -c:v libx264 -preset fast -crf 22 -c:a copy final.mp4
-        Move-Item -Force final.mp4 animation.mp4
+        if (Test-Path captions_overlay.mp4) {
+          ffmpeg -i animation.mp4 -i captions_overlay.mp4 -filter_complex "[1:v]fps=48,colorkey=color=0x00FF00:similarity=0.4:blend=0.1[cap];[0:v][cap]overlay=0:0[out]" -map "[out]" -map 0:a -c:v libx264 -preset fast -crf 22 -c:a copy final.mp4
+          Move-Item -Force final.mp4 animation.mp4
+        } else {
+          Write-Host "captions_overlay.mp4 not found (build_background.js returned early) — skipping caption composite"
+        }
 
     - name: Upload animation to github actions results
       uses: actions/upload-artifact@v4
