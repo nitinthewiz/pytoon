@@ -5,7 +5,7 @@ import { fade } from '@remotion/transitions/fade';
 import {
   IMAGE_Y,
   GREEN_BAR_Y, GREEN_BAR_H,
-  HEADLINE_CARD_X, HEADLINE_CARD_Y, HEADLINE_CARD_W, HEADLINE_CARD_H, HEADLINE_Y,
+  HEADLINE_CARD_X, HEADLINE_CARD_Y, HEADLINE_CARD_W, HEADLINE_CARD_H,
   GREEN,
   TEASER_TRANSITION_FRAMES,
 } from './layout';
@@ -20,13 +20,10 @@ export const TeaserSlide: React.FC<Props> = ({ images, durationInFrames }) => {
     return <AbsoluteFill style={{ backgroundColor: '#1a1a2e' }} />;
   }
 
-  // Distribute frames evenly across images, accounting for transition overlap budget
-  // so the inner TransitionSeries total ≈ durationInFrames.
   const n = images.length;
   const totalSequenceFrames = durationInFrames + (n - 1) * TEASER_TRANSITION_FRAMES;
   const baseFrames = Math.floor(totalSequenceFrames / n);
   const remainder = totalSequenceFrames - baseFrames * n;
-  // Give extra frames to the last image so the total is exact
   const frameCounts = images.map((_, i) =>
     i === n - 1 ? baseFrames + remainder : baseFrames
   );
@@ -79,7 +76,7 @@ export const TeaserSlide: React.FC<Props> = ({ images, durationInFrames }) => {
         }}
       />
 
-      {/* White headline card */}
+      {/* White headline card with centred label */}
       <div
         style={{
           position: 'absolute',
@@ -88,16 +85,10 @@ export const TeaserSlide: React.FC<Props> = ({ images, durationInFrames }) => {
           width: HEADLINE_CARD_W,
           height: HEADLINE_CARD_H,
           backgroundColor: '#ffffff',
-        }}
-      />
-
-      {/* "TONIGHT'S TOP STORIES" label */}
-      <div
-        style={{
-          position: 'absolute',
-          top: HEADLINE_Y,
-          left: HEADLINE_CARD_X + 16,
-          width: HEADLINE_CARD_W - 32,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 24px',
+          boxSizing: 'border-box',
         }}
       >
         <span
@@ -107,7 +98,6 @@ export const TeaserSlide: React.FC<Props> = ({ images, durationInFrames }) => {
             fontWeight: 900,
             color: GREEN,
             lineHeight: 1.15,
-            display: 'block',
           }}
         >
           TONIGHT'S TOP STORIES

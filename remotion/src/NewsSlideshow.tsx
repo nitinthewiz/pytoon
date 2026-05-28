@@ -4,7 +4,7 @@ import { TransitionSeries, linearTiming } from '@remotion/transitions';
 import { APPROVED_TRANSITIONS } from './transitions';
 import { StorySlide } from './StorySlide';
 import { TeaserSlide } from './TeaserSlide';
-import { AVATAR_ZONE_H, BADGE_Y, BADGE_H, GREEN, TRANSITION_FRAMES } from './layout';
+import { AVATAR_ZONE_H, BADGE_Y, BADGE_H, GREEN, TRANSITION_FRAMES, BOTTOM_BAR_H } from './layout';
 import { type CompositionProps } from './types';
 
 // Re-export for backwards compatibility (Root.tsx, CaptionsOverlay.tsx import Props from here)
@@ -60,6 +60,43 @@ export const NewsSlideshow: React.FC<CompositionProps> = ({ items }) => {
           );
         })}
       </TransitionSeries>
+
+      {/* Bottom ticker bar — static, always visible */}
+      {(() => {
+        const now = new Date();
+        const edition = now.getHours() < 12 ? 'AM EDITION' : 'PM EDITION';
+        const dateStr = now.toLocaleDateString('en-US', {
+          month: 'long', day: 'numeric', year: 'numeric',
+        });
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: BOTTOM_BAR_H,
+              backgroundColor: '#111111',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 24,
+            }}
+          >
+            <span style={{ fontFamily: '"Arial Black", Arial, sans-serif', fontSize: 24, fontWeight: 900, color: GREEN, letterSpacing: 1 }}>
+              AMOS NEWS
+            </span>
+            <span style={{ color: '#555555', fontSize: 22 }}>|</span>
+            <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 22, fontWeight: 600, color: '#ffffff' }}>
+              {dateStr}
+            </span>
+            <span style={{ color: '#555555', fontSize: 22 }}>|</span>
+            <span style={{ fontFamily: '"Arial Black", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: '#ffffff', letterSpacing: 1 }}>
+              {edition}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* "TOP NEWS" badge — static, highest z, always visible */}
       <div

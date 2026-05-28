@@ -3,7 +3,7 @@ import { Composition } from 'remotion';
 import { NewsSlideshow } from './NewsSlideshow';
 import { CaptionsOverlay } from './CaptionsOverlay';
 import { type CompositionProps as Props } from './types';
-import { TRANSITION_FRAMES } from './layout';
+import { CANVAS_H, TRANSITION_FRAMES } from './layout';
 
 const DEFAULT_PROPS: Props = {
   items: [{ imagePath: 'images/placeholder.jpg', durationInFrames: 90 }],
@@ -26,7 +26,7 @@ export const Root: React.FC = () => {
         durationInFrames={90}
         fps={30}
         width={1080}
-        height={2355}
+        height={CANVAS_H}
         defaultProps={DEFAULT_PROPS}
         calculateMetadata={calculateMetadata}
       />
@@ -36,7 +36,7 @@ export const Root: React.FC = () => {
         durationInFrames={90}
         fps={30}
         width={1080}
-        height={2355}
+        height={CANVAS_H}
         defaultProps={DEFAULT_PROPS}
         calculateMetadata={calculateMetadata}
       />

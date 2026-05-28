@@ -120,7 +120,7 @@ animation = animate(
 )
 
 CANVAS_W = 1080
-AVATAR_ZONE_H = 782
+AVATAR_ZONE_H = 640  # matches layout.ts AVATAR_ZONE_H for 9:16 canvas
 # Scale character to 75% of canvas width so they appear as a centred portrait
 # bust rather than filling edge-to-edge (which looked squat/wide).
 AVATAR_WIDTH = int(CANVAS_W * 0.75)  # 810px — 135px studio bg visible each side

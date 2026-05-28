@@ -2,7 +2,7 @@ import React from 'react';
 import { AbsoluteFill, Img, staticFile } from 'remotion';
 import {
   GREEN_BAR_Y, GREEN_BAR_H,
-  HEADLINE_CARD_X, HEADLINE_CARD_Y, HEADLINE_CARD_W, HEADLINE_CARD_H, HEADLINE_Y,
+  HEADLINE_CARD_X, HEADLINE_CARD_Y, HEADLINE_CARD_W, HEADLINE_CARD_H,
   IMAGE_Y,
   BADGE_Y, BADGE_H,
   GREEN, BADGE_BG,
@@ -47,7 +47,7 @@ export const StorySlide: React.FC<Props> = ({ item }) => (
       }}
     />
 
-    {/* 3. White headline card — covers center strip of green bar */}
+    {/* 3 + 4. White headline card with vertically centred text */}
     <div
       style={{
         position: 'absolute',
@@ -56,16 +56,10 @@ export const StorySlide: React.FC<Props> = ({ item }) => (
         width: HEADLINE_CARD_W,
         height: HEADLINE_CARD_H,
         backgroundColor: '#ffffff',
-      }}
-    />
-
-    {/* 4. Headline text */}
-    <div
-      style={{
-        position: 'absolute',
-        top: HEADLINE_Y,
-        left: HEADLINE_CARD_X + 16,
-        width: HEADLINE_CARD_W - 32,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 24px',
+        boxSizing: 'border-box',
       }}
     >
       <span
@@ -75,14 +69,13 @@ export const StorySlide: React.FC<Props> = ({ item }) => (
           fontWeight: 900,
           color: '#111111',
           lineHeight: 1.15,
-          display: 'block',
         }}
       >
         {item.title ?? ''}
       </span>
     </div>
 
-    {/* 5. Source badge — top-right of avatar zone */}
+    {/* 5. Source / category badge — top-right of avatar zone */}
     {item.source ? (
       <div
         style={{
