@@ -4,6 +4,52 @@ A running log of choices made in the pipeline and options that were considered b
 
 ---
 
+## Canvas aspect ratio: 9:16 (1080×1920)
+
+**Decision:** Rescale the Remotion canvas from the original 1080×2355 (ratio ~1:2.18) to standard 9:16 (1080×1920). All layout constants in `layout.ts` were multiplied by 1920/2355 ≈ 0.8152.
+
+**Why:** Telegram aggressively crops very tall portrait videos in chat preview — only the top ~40% was visible as thumbnail. Standard 9:16 renders correctly in Telegram's inline player and preview thumbnail.
+
+**Alternative:** Keep 1080×2355 and rely on the full-screen player. Rejected — the cropped thumbnail looked broken and gave no visual signal of the video content.
+
+---
+
+## Avatar scale and position
+
+**Decision:** Scale avatar to 75% of canvas width (810px), cropped to 640px height, centred horizontally, anchored to the top of the avatar zone. In `main.py`: `AVATAR_WIDTH = int(CANVAS_W * 0.75)`, `position=("center", "top")`.
+
+**Why:** Rendering at full canvas width (1080px) in a 1080×640 crop zone produced a nearly-square visible frame, making the cartoon character look squat and wide. At 75% width, 135px of studio background is visible on each side, giving a portrait bust appearance and matching the original SVG intent.
+
+**Alternative:** Anchoring bottom-right (the original behaviour) with full width. Rejected — character appeared off-centre and disproportionately wide.
+
+---
+
+## Headline card text alignment
+
+**Decision:** Headline text is vertically centred in the white card using CSS `display: flex; alignItems: center` rather than a fixed `HEADLINE_Y` pixel offset.
+
+**Why:** The fixed offset positioned text near the top of the card, leaving unequal whitespace. Flexbox centering is robust to varying text length and font rendering differences across render environments.
+
+**Alternative:** Calculate `HEADLINE_Y` as card midpoint minus half the font metrics. Brittle — line-height and multi-line wrapping make this hard to get right without runtime measurement.
+
+---
+
+## Bottom ticker bar
+
+**Decision:** Add a static 72px ticker bar at the bottom of `NewsSlideshow` showing "AMOS NEWS | [current date] | AM/PM EDITION". Date and AM/PM computed at Remotion render time via `new Date()`.
+
+**Why:** The original SVG design included this bar for branding. It was missing from the initial port to Remotion.
+
+---
+
+## Captions overlay crash guard (`Test-Path`)
+
+**Decision:** Wrap the ffmpeg captions composite step in `main.yml` with `if (Test-Path captions_overlay.mp4)`. If the file doesn't exist, log a message and skip.
+
+**Why:** `build_background.js` has multiple early-return paths (no news items, zero story segments, audio read failure, all images fail). When it exits early, `captions_overlay.mp4` is never created. The unconditional ffmpeg composite step then crashed with "No such file or directory", failing the entire GitHub Actions run. This caused 3 consecutive daily failures (May 25–27, 2026).
+
+---
+
 ## MediaStack: Australia-centric results
 
 **Symptom:** `sort=popularity` with no `countries` parameter returns AU-biased news, likely because the APILayer account was registered from an Australian IP and popularity is scored regionally.

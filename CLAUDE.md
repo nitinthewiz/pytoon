@@ -8,7 +8,7 @@ This file is for AI assistants. It describes how this repo is used in production
 
 This is a forked/extended version of pytoon, adapted into an automated daily news video pipeline. The original library (lip-sync animation) is intact; everything at the root level is the pipeline layer built on top of it.
 
-**Output:** Portrait MP4 (1792×2688) — news image slideshow on top, talking cartoon avatar on bottom, word-by-word captions overlaid. Posted to Telegram daily at ~9:30 AM.
+**Output:** Portrait MP4 (1080×1920, 9:16) — news image slideshow on top, talking cartoon avatar on bottom, word-by-word captions overlaid. Posted to Telegram daily at ~9:30 AM.
 
 ---
 
@@ -79,22 +79,27 @@ If `news_b64` is empty, Remotion step is skipped and the checked-in `background_
 
 **Emotions:** explain, happy, rhetorical, sad, angry, confused
 
-**Export:** avatar overlaid on background video, scaled to 70%, anchored bottom-right.
+**Export:** avatar overlaid on background video, scaled to 75% of canvas width (810px), centred horizontally, cropped to 640px height, anchored to the top of the avatar zone. The 135px of studio background visible on each side prevents the character from appearing squat/wide.
 
 ---
 
 ## Remotion compositions
 
-**`NewsSlideshow`** (1792×2688 @ 30 FPS):
-- Top 1344px: `TransitionSeries` of news images with transitions selected deterministically (`image_index % num_transitions`)
-- Bottom 1344px: solid background (avatar zone, no content)
-- 15-frame crossfade between slides
+Canvas is **1080×1920 (9:16)** @ 30 FPS, scaled from the original ToonVertical2.svg (1080×2355) at factor 0.8152. All layout constants are in `remotion/src/layout.ts`.
+
+**`NewsSlideshow`**:
+- `0–640px` (AVATAR_ZONE_H): studio background behind avatar — static, no Remotion content
+- `640–873px`: white headline card (flexbox-centred text, Impact font, 58px) overlapping a green accent bar; card floats over the top of the news image
+- `803px–bottom` (IMAGE_Y): news image zone
+- Bottom 72px (BOTTOM_BAR_H): static ticker bar — "AMOS NEWS | [date] | AM/PM EDITION" — always visible, rendered over all slides
+- "TOP NEWS" green badge pinned top-left at y=600px
+- `TransitionSeries` with transitions selected deterministically (`i % APPROVED_TRANSITIONS.length`); 15-frame crossfade between slides (TRANSITION_FRAMES)
 
 **`CaptionsOverlay`** (same dimensions):
 - Green screen background (`#00FF00`) for ffmpeg `colorkey` compositing
 - Words grouped into pages (within 1200ms windows)
 - Active word: yellow `#FFE81A`; others: white
-- Positioned at y=2050px (avatar chest level)
+- Positioned at y=1480px (CAPTION_TOP — avatar chest level)
 
 ---
 
@@ -133,6 +138,7 @@ Kokoro expands numbers into multiple tokens. The function uses greedy lookahead:
 - `forcealign` requires NLTK corpus download on first run (handled in workflow)
 - Remotion Chrome Headless Shell is cached in GitHub Actions to avoid re-downloading (~300MB)
 - pytoon is CPU-only by design; no GPU alternatives exist that are open-source + end-to-end for cartoon characters
+- **MediaStack can return 0 results** (rate limit, transient outage, or date-boundary edge case). When this happens `build_background.js` exits early without creating `captions_overlay.mp4`, and the composite ffmpeg step is skipped via a `Test-Path` guard — the run continues with the checked-in fallback `background_video.mp4`
 
 ---
 
