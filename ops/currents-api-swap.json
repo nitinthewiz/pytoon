@@ -1,0 +1,41 @@
+{
+  "_comment": "Drop-in replacement nodes for switching from MediaStack to Currents API (currentsapi.services). Replace the two nodes below in the MediaStack2Telegram n8n workflow. Trigger: MediaStack free tier has a ~5-day data lag; the date filter consistently returns 0 results for recent dates. Currents API free tier is real-time with 1,000 req/day.",
+  "_instructions": "1. Get a free API key at https://currentsapi.services/en/register . 2. In n8n, open the MediaStack2Telegram workflow. 3. Replace the parameters of 'HTTP Request1' and 'Filter Images' with the values below. 4. Store your Currents API key in an n8n credential or paste it directly into the Authorization header value.",
+
+  "HTTP Request1": {
+    "_replaces": "GET https://api.mediastack.com/v1/news?...",
+    "_note": "Currents returns up to 300 items per call on free tier. No date filter needed — it always returns the latest news. Sports are not excluded at the API level; the LLM story-selection step already filters by quality/relevance.",
+    "parameters": {
+      "url": "https://api.currentsapi.services/v1/latest-news",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer YOUR_CURRENTS_API_KEY_HERE"
+          }
+        ]
+      },
+      "sendQuery": true,
+      "queryParameters": {
+        "parameters": [
+          { "name": "language", "value": "en" },
+          { "name": "page_size", "value": "200" }
+        ]
+      },
+      "options": {}
+    },
+    "retryOnFail": true,
+    "waitBetweenTries": 5000
+  },
+
+  "Filter Images": {
+    "_replaces": "reads .json.data, filters item.image !== null",
+    "_note": "Currents puts articles in .news (not .data). Images are the string 'None' when absent (not JS null). Country is not provided by Currents — downstream nodes already fall back to '??' when country is null.",
+    "jsCode": "const data = $input.first().json.news || [];\nconst filtered = data\n  .filter(item => item.image && item.image !== 'None')\n  .map(item => ({\n    title: item.title,\n    description: item.description,\n    url: item.url,\n    image: item.image,\n    category: Array.isArray(item.category) ? item.category[0] : (item.category || 'general'),\n    country: null\n  }));\nconst newsB64 = Buffer.from(JSON.stringify(filtered)).toString('base64');\nreturn [{ json: { newsB64, filteredData: filtered } }];"
+  },
+
+  "IF - check if MediaStack sent news items": {
+    "_note": "No change needed to the IF node itself. After the swap the field path is the same: filteredData.length > 0. Only the node name is misleading — rename it to 'If - check if Currents API sent news items' if desired."
+  }
+}
