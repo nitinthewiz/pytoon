@@ -1,0 +1,1 @@
+- [ ] Review and scale font sizes/paddings in Remotion components (CaptionsOverlay, StorySlide, TeaserSlide) to match new 1792x2688 resolution.

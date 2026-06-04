@@ -178,3 +178,16 @@ Kokoro's token stream doesn't map 1-to-1 with the original speech text because i
 - **TheNewsAPI** — 3 req/day free, no payment required.
 
 No switch made — MediaStack is sufficient once the bias issue is resolved.
+
+---
+
+## Remotion Canvas Resolution Update
+ 
+**Decision:** Rescale the Remotion canvas from standard 9:16 (1080×1920) to a larger 1792 × 2688 portrait resolution. Updated `layout.ts` with new pixel positions, widths, and heights to maintain visual hierarchy.
+ 
+**Why:** The previous 1080x1920 resolution (configured in `layout.ts`) caused significant layout asymmetry on the actual 1792x2688 canvas used by the project, specifically with headline card margins. This change aligns the internal Remotion coordinate system with the physical video output dimensions to ensure symmetrical alignment and correct scaling of all overlaid elements.
+ 
+**Note:** Font sizes and paddings in components remain at original pixel values; a follow-up task is required to scale these for optimal readability on the larger canvas.
+
+---
+
