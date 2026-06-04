@@ -8,7 +8,7 @@ This file is for AI assistants. It describes how this repo is used in production
 
 This is a forked/extended version of pytoon, adapted into an automated daily news video pipeline. The original library (lip-sync animation) is intact; everything at the root level is the pipeline layer built on top of it.
 
-**Output:** Portrait MP4 (1080×1920, 9:16) — news image slideshow on top, talking cartoon avatar on bottom, word-by-word captions overlaid. Posted to Telegram daily at ~9:30 AM.
+**Output:** Portrait MP4 (1792×2688, 9:16) — news image slideshow on top, talking cartoon avatar on bottom, word-by-word captions overlaid. Posted to Telegram daily at ~9:30 AM.
 
 ---
 
@@ -85,7 +85,7 @@ If `news_b64` is empty, Remotion step is skipped and the checked-in `background_
 
 ## Remotion compositions
 
-Canvas is **1080×1920 (9:16)** @ 30 FPS, scaled from the original ToonVertical2.svg (1080×2355) at factor 0.8152. All layout constants are in `remotion/src/layout.ts`.
+Canvas is **1792×2688 (9:16)** @ 30 FPS, scaled from the original ToonVertical2.svg (1080×2355) at factor 0.8152. All layout constants are in `remotion/src/layout.ts`.
 
 **`NewsSlideshow`**:
 - `0–640px` (AVATAR_ZONE_H): studio background behind avatar — static, no Remotion content
@@ -153,7 +153,7 @@ Kokoro expands numbers into multiple tokens. The function uses greedy lookahead:
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **pytoon** (424 symbols, 527 relationships, 6 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **pytoon** (480 symbols, 595 relationships, 6 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
