@@ -42,7 +42,7 @@ jobs:
 
     - name: Install moviepy and audioop
       run: |
-        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install moviepy==1.0.3 audioop-lts==0.2.1 num2words
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install moviepy==1.0.3 audioop-lts==0.2.1 num2words numpy<2
 
     - name: Install dependencies
       run: |
