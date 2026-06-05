@@ -37,16 +37,16 @@ jobs:
 
     - name: Install pytoon from local source
       run: |
-        "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install --upgrade pip
-        "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install -e .
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install --upgrade pip
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install -e .
 
     - name: Install moviepy and audioop
       run: |
-        "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install moviepy==1.0.3 audioop-lts==0.2.1 num2words
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install moviepy==1.0.3 audioop-lts==0.2.1 num2words
 
     - name: Install dependencies
       run: |
-        "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m nltk.downloader punkt averaged_perceptron_tagger averaged_perceptron_tagger_eng cmudict words
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m nltk.downloader punkt averaged_perceptron_tagger averaged_perceptron_tagger_eng cmudict words
 
     - name: Authenticate MinIO client
       if: ${{ !startsWith(inputs.audio_input, 'speech.mp3') }}
