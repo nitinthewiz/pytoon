@@ -7,6 +7,7 @@ import {
   BADGE_Y, BADGE_H,
   GREEN, BADGE_BG,
 } from './layout';
+import { ROBOTO } from './fonts';
 import { type NewsItem } from './types';
 
 type Props = { item: NewsItem };
@@ -58,17 +59,18 @@ export const StorySlide: React.FC<Props> = ({ item }) => (
         backgroundColor: '#ffffff',
         display: 'flex',
         alignItems: 'center',
-        padding: '0 24px',
+        padding: '0 36px',
         boxSizing: 'border-box',
       }}
     >
       <span
         style={{
-          fontFamily: 'Impact, "Arial Black", Arial, sans-serif',
-          fontSize: 58,
-          fontWeight: 900,
+          fontFamily: ROBOTO,
+          fontSize: 62,
+          fontWeight: 700,
           color: '#111111',
-          lineHeight: 1.15,
+          lineHeight: 1.16,
+          textTransform: 'uppercase',
         }}
       >
         {item.title ?? ''}
@@ -81,11 +83,13 @@ export const StorySlide: React.FC<Props> = ({ item }) => (
         style={{
           position: 'absolute',
           top: BADGE_Y,
-          right: 52,
-          width: 226,
+          right: 40,
+          minWidth: 200,
           height: BADGE_H,
+          padding: '0 28px',
+          boxSizing: 'border-box',
           backgroundColor: BADGE_BG,
-          borderRadius: 6,
+          borderRadius: 4,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -93,9 +97,9 @@ export const StorySlide: React.FC<Props> = ({ item }) => (
       >
         <span
           style={{
-            fontFamily: '"Arial Black", Arial, sans-serif',
-            fontSize: 22,
-            fontWeight: 700,
+            fontFamily: ROBOTO,
+            fontSize: 34,
+            fontWeight: 500,
             color: '#333333',
           }}
         >

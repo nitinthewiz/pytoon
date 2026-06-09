@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import { createTikTokStyleCaptions } from '@remotion/captions';
 import { CAPTION_TOP } from './layout';
+import { ROBOTO } from './fonts';
 import { type CompositionProps } from './types';
 
 export const CaptionsOverlay: React.FC<CompositionProps> = ({ captions }) => {
@@ -29,7 +30,7 @@ export const CaptionsOverlay: React.FC<CompositionProps> = ({ captions }) => {
             top: CAPTION_TOP,
             left: 0,
             right: 0,
-            padding: '0 60px',
+            padding: '0 50px',
             display: 'flex',
             flexWrap: 'wrap',
             justifyContent: 'center',
@@ -41,13 +42,13 @@ export const CaptionsOverlay: React.FC<CompositionProps> = ({ captions }) => {
               <span
                 key={i}
                 style={{
-                  fontFamily: '"Arial Black", Arial, sans-serif',
-                  fontSize: 76,
+                  fontFamily: ROBOTO,
+                  fontSize: 86,
                   fontWeight: 900,
-                  lineHeight: 1.25,
+                  lineHeight: 1.22,
                   color: isActive ? '#FFE81A' : '#FFFFFF',
                   textShadow:
-                    '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000',
+                    '-6px -6px 0 #000, 6px -6px 0 #000, -6px 6px 0 #000, 6px 6px 0 #000, 0 0 12px rgba(0,0,0,0.4)',
                   whiteSpace: 'pre',
                 }}
               >

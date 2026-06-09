@@ -9,6 +9,7 @@ import {
   GREEN,
   TEASER_TRANSITION_FRAMES,
 } from './layout';
+import { ROBOTO } from './fonts';
 
 type Props = {
   images: string[];
@@ -87,17 +88,18 @@ export const TeaserSlide: React.FC<Props> = ({ images, durationInFrames }) => {
           backgroundColor: '#ffffff',
           display: 'flex',
           alignItems: 'center',
-          padding: '0 24px',
+          padding: '0 36px',
           boxSizing: 'border-box',
         }}
       >
         <span
           style={{
-            fontFamily: 'Impact, "Arial Black", Arial, sans-serif',
-            fontSize: 58,
-            fontWeight: 900,
+            fontFamily: ROBOTO,
+            fontSize: 62,
+            fontWeight: 700,
             color: GREEN,
-            lineHeight: 1.15,
+            lineHeight: 1.16,
+            textTransform: 'uppercase',
           }}
         >
           TONIGHT'S TOP STORIES

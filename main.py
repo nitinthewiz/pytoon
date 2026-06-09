@@ -119,11 +119,11 @@ animation = animate(
     emotion_schedule=emotion_schedule or None,
 )
 
-CANVAS_W = 1792
-AVATAR_ZONE_H = 896  # matches layout.ts AVATAR_ZONE_H for 1792x2688 canvas
+CANVAS_W = 1080
+AVATAR_ZONE_H = 704  # matches layout.ts AVATAR_ZONE_H for 1080x1920 (9:16) canvas
 # Scale character to 75% of canvas width so they appear as a centred portrait
 # bust rather than filling edge-to-edge (which looked squat/wide).
-AVATAR_WIDTH = int(CANVAS_W * 0.75)  # 1344px — 224px studio bg visible each side
+AVATAR_WIDTH = int(CANVAS_W * 0.75)  # 810px — 135px studio bg visible each side
 
 background_video = VideoFileClip("background_video.mp4")
 animation.export(

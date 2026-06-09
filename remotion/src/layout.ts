@@ -1,35 +1,37 @@
 // Single source of truth for all pixel positions.
-// Canvas: 1792 × 2688 (Portrait)
+// Canvas: 1080 × 1920 (Portrait 9:16 — TikTok / Reels / YouTube Shorts standard)
 
-export const CANVAS_W = 1792;
-export const CANVAS_H = 2688;
+export const CANVAS_W = 1080;
+export const CANVAS_H = 1920;
 
-// Avatar zone — studio BG + talking head occupy the top
-export const AVATAR_ZONE_H = 896;
+// Avatar zone — studio BG + talking head occupy the top.
+// main.py overlays the pytoon avatar over this region; keep AVATAR_ZONE_H in
+// sync with main.py's avatar_crop_height so the composite lines up.
+export const AVATAR_ZONE_H = 704;
 
-// Lower-third badges sit near the bottom of the avatar zone
-export const BADGE_Y = 840;
-export const BADGE_H = 80;
+// "Top News" badge + source badge sit on one row at the bottom of the avatar zone
+export const BADGE_Y = 608;
+export const BADGE_H = 96;
 
-// Green accent bar separates headline card from news image
-export const GREEN_BAR_Y = 1005;
-export const GREEN_BAR_H = 130; // y 1005–1135
+// Green accent bar — full width behind the headline card; peeks at the card's
+// left/right margins
+export const GREEN_BAR_Y = 784;
+export const GREEN_BAR_H = 100; // y 784–884
 
-// White headline card floats over the green bar.
-// Perfectly symmetrical margins (46px on each side)
-export const HEADLINE_CARD_X = 46;
-export const HEADLINE_CARD_Y = 903;
-export const HEADLINE_CARD_W = 1700; // 1792 - (46 * 2)
-export const HEADLINE_CARD_H = 320;  // y 903–1223
+// White headline card floats over the green bar (40px margins each side)
+export const HEADLINE_CARD_X = 40;
+export const HEADLINE_CARD_Y = 704;
+export const HEADLINE_CARD_W = 1000; // 1080 - (40 * 2)
+export const HEADLINE_CARD_H = 250;  // y 704–954
 
-// News image zone — image is behind the card; only visible below card bottom
-export const IMAGE_Y = 1125;
+// News image zone — image is behind the card; only fully visible below card bottom
+export const IMAGE_Y = 876;
 
-// Captions — TikTok-style overlay in lower image zone
-export const CAPTION_TOP = 2072;
+// Captions — TikTok-style overlay over the avatar's lower third
+export const CAPTION_TOP = 1500;
 
 // Bottom ticker bar
-export const BOTTOM_BAR_H = 100;
+export const BOTTOM_BAR_H = 72;
 
 // Brand colours
 export const GREEN = '#219653';

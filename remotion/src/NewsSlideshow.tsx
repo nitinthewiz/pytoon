@@ -5,6 +5,7 @@ import { APPROVED_TRANSITIONS } from './transitions';
 import { StorySlide } from './StorySlide';
 import { TeaserSlide } from './TeaserSlide';
 import { AVATAR_ZONE_H, BADGE_Y, BADGE_H, GREEN, TRANSITION_FRAMES, BOTTOM_BAR_H } from './layout';
+import { ROBOTO } from './fonts';
 import { type CompositionProps } from './types';
 
 // Re-export for backwards compatibility (Root.tsx, CaptionsOverlay.tsx import Props from here)
@@ -61,13 +62,16 @@ export const NewsSlideshow: React.FC<CompositionProps> = ({ items }) => {
         })}
       </TransitionSeries>
 
-      {/* Bottom ticker bar — static, always visible */}
+      {/* Bottom ticker bar — static, always visible. Light bar, muted text. */}
       {(() => {
         const now = new Date();
-        const edition = now.getHours() < 12 ? 'AM EDITION' : 'PM EDITION';
-        const dateStr = now.toLocaleDateString('en-US', {
-          month: 'long', day: 'numeric', year: 'numeric',
-        });
+        const edition = now.getHours() < 12 ? 'am edition' : 'pm edition';
+        const dateStr = now
+          .toLocaleDateString('en-US', {
+            weekday: 'long', month: 'short', day: 'numeric', year: 'numeric',
+          })
+          .toLowerCase()
+          .replace(/, (\d{4})$/, ' $1'); // "monday, jan 20 2020"
         return (
           <div
             style={{
@@ -76,38 +80,39 @@ export const NewsSlideshow: React.FC<CompositionProps> = ({ items }) => {
               left: 0,
               right: 0,
               height: BOTTOM_BAR_H,
-              backgroundColor: '#111111',
+              backgroundColor: '#ECECEC',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 24,
+              gap: 18,
             }}
           >
-            <span style={{ fontFamily: '"Arial Black", Arial, sans-serif', fontSize: 24, fontWeight: 900, color: GREEN, letterSpacing: 1 }}>
-              AMOS NEWS
+            <span style={{ fontFamily: ROBOTO, fontSize: 28, fontWeight: 700, color: '#555555' }}>
+              newshound news
             </span>
-            <span style={{ color: '#555555', fontSize: 22 }}>|</span>
-            <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 22, fontWeight: 600, color: '#ffffff' }}>
+            <span style={{ color: '#BBBBBB', fontSize: 26 }}>|</span>
+            <span style={{ fontFamily: ROBOTO, fontSize: 28, fontWeight: 400, color: '#888888' }}>
               {dateStr}
             </span>
-            <span style={{ color: '#555555', fontSize: 22 }}>|</span>
-            <span style={{ fontFamily: '"Arial Black", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: '#ffffff', letterSpacing: 1 }}>
+            <span style={{ color: '#BBBBBB', fontSize: 26 }}>|</span>
+            <span style={{ fontFamily: ROBOTO, fontSize: 28, fontWeight: 400, color: '#888888' }}>
               {edition}
             </span>
           </div>
         );
       })()}
 
-      {/* "TOP NEWS" badge — static, highest z, always visible */}
+      {/* "Top News" badge — static, highest z, always visible */}
       <div
         style={{
           position: 'absolute',
           top: BADGE_Y,
-          left: 52,
-          width: 260,
+          left: 40,
           height: BADGE_H,
+          padding: '0 36px',
+          boxSizing: 'border-box',
           backgroundColor: GREEN,
-          borderRadius: 6,
+          borderRadius: 4,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -115,14 +120,13 @@ export const NewsSlideshow: React.FC<CompositionProps> = ({ items }) => {
       >
         <span
           style={{
-            fontFamily: '"Arial Black", Arial, sans-serif',
-            fontSize: 26,
-            fontWeight: 900,
+            fontFamily: ROBOTO,
+            fontSize: 44,
+            fontWeight: 700,
             color: '#ffffff',
-            letterSpacing: 1,
           }}
         >
-          TOP NEWS
+          Top News
         </span>
       </div>
 
