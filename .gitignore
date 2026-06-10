@@ -14,3 +14,12 @@ remotion/public/images/
 render-props.json
 news.json
 speech.txt
+# pipeline build outputs (regenerated each run; background_video.mp4 is the
+# only committed video — it's the fallback)
+animation.mp4
+avatar.mp4
+captions_overlay.mp4
+captions.json
+emotions.json
+composite.json
+speech.wav

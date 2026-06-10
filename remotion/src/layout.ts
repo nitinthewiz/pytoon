@@ -1,8 +1,10 @@
-// Single source of truth for all pixel positions.
-// Canvas: 1080 × 1920 (Portrait 9:16 — TikTok / Reels / YouTube Shorts standard)
+// Pixel geometry for the StorySegment scene's zones.
+// Canvas + brand colours come from the shared production config (production.ts);
+// this file owns only the layout positions.
+import { CANVAS_W as CW, CANVAS_H as CH, COLORS } from './production';
 
-export const CANVAS_W = 1080;
-export const CANVAS_H = 1920;
+export const CANVAS_W = CW;
+export const CANVAS_H = CH;
 
 // Avatar zone — studio BG + talking head occupy the top.
 // main.py overlays the pytoon avatar over this region; keep AVATAR_ZONE_H in
@@ -33,9 +35,9 @@ export const CAPTION_TOP = 1500;
 // Bottom ticker bar
 export const BOTTOM_BAR_H = 72;
 
-// Brand colours
-export const GREEN = '#219653';
-export const BADGE_BG = '#EBEBEB';
+// Brand colours — sourced from the production config
+export const GREEN = COLORS.accent;
+export const BADGE_BG = COLORS.badgeBg;
 
 // Transition lengths
 export const TRANSITION_FRAMES = 15;

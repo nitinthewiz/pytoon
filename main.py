@@ -2,7 +2,7 @@ import json
 import os
 import re
 from pytoon.animator import animate
-from moviepy.editor import VideoFileClip
+from moviepy.editor import ColorClip, AudioFileClip
 
 
 def expand_numbers(text):
@@ -119,17 +119,28 @@ animation = animate(
     emotion_schedule=emotion_schedule or None,
 )
 
-CANVAS_W = 1080
-AVATAR_ZONE_H = 704  # matches layout.ts AVATAR_ZONE_H for 1080x1920 (9:16) canvas
-# Scale character to 75% of canvas width so they appear as a centred portrait
-# bust rather than filling edge-to-edge (which looked squat/wide).
-AVATAR_WIDTH = int(CANVAS_W * 0.75)  # 810px — 135px studio bg visible each side
+# Canvas + avatar settings come from the shared production config (single source
+# of truth — also read by the Remotion side).
+with open("productions/daily-news/production.json", encoding="utf-8") as f:
+    PROD = json.load(f)
+CANVAS_W = PROD["canvas"]["width"]
+CANVAS_H = PROD["canvas"]["height"]
+AVATAR_WIDTH = int(CANVAS_W * PROD["avatar"]["widthPct"])  # 810px — 135px clear each side
+AVATAR_CROP_H = PROD["avatar"]["cropHeight"]               # 704px avatar zone
 
-background_video = VideoFileClip("background_video.mp4")
+# Avatar is rendered as a KEYABLE OVERLAY LAYER (magenta screen), not baked over
+# the news background. compose.js keys out the magenta and stacks the avatar onto
+# the Remotion Production background at the right time offset. Magenta (255,0,255)
+# avoids the captions' green key and is absent from the character art. Sizing the
+# key background to the audio length also trims pytoon's trailing silent frames.
+KEY_COLOR = (255, 0, 255)
+audio_duration = AudioFileClip("speech.mp3").duration
+key_bg = ColorClip(size=(CANVAS_W, CANVAS_H), color=KEY_COLOR).set_duration(audio_duration)
+
 animation.export(
-    path='animation.mp4',
-    background=background_video,
+    path='avatar.mp4',
+    background=key_bg,
     avatar_width=AVATAR_WIDTH,
-    avatar_crop_height=AVATAR_ZONE_H,
+    avatar_crop_height=AVATAR_CROP_H,
     position=("center", "top"),
 )

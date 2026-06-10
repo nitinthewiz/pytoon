@@ -11,9 +11,24 @@ const OUTPUT_VIDEO = path.join(__dirname, 'background_video.mp4');
 const IMAGE_DIR = path.join(__dirname, 'remotion', 'public', 'images');
 const PROPS_FILE = path.join(__dirname, 'render-props.json');
 const CAPTIONS_JSON = path.join(__dirname, 'captions.json');
+const PRODUCTION_JSON = path.join(__dirname, 'productions', 'daily-news', 'production.json');
+const COMPOSITE_JSON = path.join(__dirname, 'composite.json');
 
 const FPS = 30;
 const TRANSITION_FRAMES = 15;
+
+// Where the stories scene begins on the Production timeline (seconds). The
+// narration audio, pytoon avatar and captions are all offset to this point so
+// they line up with the stories scene (after Opening + Headlines play).
+function computeStoriesStartSec() {
+  const prod = JSON.parse(fs.readFileSync(PRODUCTION_JSON, 'utf8'));
+  const pfps = prod.canvas.fps;
+  const dur = (t) => (prod.scenes.find((s) => s.type === t) || {}).durationSec || 0;
+  const stf = prod.sceneTransition.durationFrames;
+  const startFrame =
+    Math.round(dur('opening') * pfps) + Math.round(dur('headlines') * pfps) - 2 * stf;
+  return { fps: pfps, storiesStartSec: Math.max(0, startFrame) / pfps };
+}
 
 async function main() {
   if (!fs.existsSync(NEWS_JSON) || !fs.existsSync(SPEECH_TXT)) {
@@ -135,9 +150,9 @@ async function main() {
   const remotionDir = path.join(__dirname, 'remotion');
   const renderFlags = '--props=../render-props.json --overwrite';
 
-  console.log(`Rendering background video: ${items.length} images, ~${totalDuration.toFixed(1)}s`);
+  console.log(`Rendering Production (full show): ${items.length} story slides, ~${totalDuration.toFixed(1)}s narration`);
   execSync(
-    `npx remotion render src/index.tsx NewsSlideshow ../background_video.mp4 ${renderFlags}`,
+    `npx remotion render src/index.tsx Production ../background_video.mp4 ${renderFlags}`,
     { cwd: remotionDir, stdio: 'inherit' }
   );
 
@@ -147,7 +162,17 @@ async function main() {
     { cwd: remotionDir, stdio: 'inherit' }
   );
 
-  console.log('Background video and captions overlay created.');
+  // Emit the composite timeline so compose.js can stack the layers data-driven.
+  const composite = computeStoriesStartSec();
+  const storiesFrames =
+    items.reduce((s, it) => s + it.durationInFrames, 0) -
+    Math.max(0, items.length - 1) * TRANSITION_FRAMES;
+  composite.storiesDurationSec = storiesFrames / composite.fps;
+  fs.writeFileSync(
+    COMPOSITE_JSON,
+    JSON.stringify({ ...composite, avatarKey: '0xFF00FF', captionsKey: '0x00FF00' }, null, 2),
+  );
+  console.log(`Production background + captions created. Stories ${composite.storiesStartSec.toFixed(2)}s–${(composite.storiesStartSec + composite.storiesDurationSec).toFixed(2)}s.`);
 }
 
 // Derive per-slide durations from Kokoro word timestamps.

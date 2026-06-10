@@ -1,0 +1,32 @@
+{
+  "id": "daily-news",
+  "meta": {
+    "brandName": "Newshound News",
+    "anchor": "James Newshound",
+    "tagline": "your daily source of top news"
+  },
+  "canvas": { "width": 1080, "height": 1920, "fps": 30 },
+  "colors": {
+    "accent": "#219653",
+    "accentDark": "#13351F",
+    "headline": "#111111",
+    "badgeBg": "#EBEBEB",
+    "footerBg": "#ECECEC",
+    "captionActive": "#FFE81A",
+    "captionBase": "#FFFFFF"
+  },
+  "fonts": { "family": "Roboto" },
+  "voice": { "tts": "bm_daniel(0.3)+am_santa(0.3)+af_sarah(0.3)", "speed": 1 },
+  "scenes": [
+    { "type": "opening", "durationSec": 3 },
+    { "type": "headlines", "durationSec": 6 },
+    { "type": "stories" },
+    { "type": "closing", "durationSec": 3 }
+  ],
+  "avatar": {
+    "widthPct": 0.75,
+    "cropHeight": 704,
+    "presentScenes": ["headlines", "stories"]
+  },
+  "sceneTransition": { "durationFrames": 20 }
+}

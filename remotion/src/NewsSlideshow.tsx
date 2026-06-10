@@ -6,6 +6,7 @@ import { StorySlide } from './StorySlide';
 import { TeaserSlide } from './TeaserSlide';
 import { AVATAR_ZONE_H, BADGE_Y, BADGE_H, GREEN, TRANSITION_FRAMES, BOTTOM_BAR_H } from './layout';
 import { ROBOTO } from './fonts';
+import { META, COLORS } from './production';
 import { type CompositionProps } from './types';
 
 // Re-export for backwards compatibility (Root.tsx, CaptionsOverlay.tsx import Props from here)
@@ -80,7 +81,7 @@ export const NewsSlideshow: React.FC<CompositionProps> = ({ items }) => {
               left: 0,
               right: 0,
               height: BOTTOM_BAR_H,
-              backgroundColor: '#ECECEC',
+              backgroundColor: COLORS.footerBg,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -88,7 +89,7 @@ export const NewsSlideshow: React.FC<CompositionProps> = ({ items }) => {
             }}
           >
             <span style={{ fontFamily: ROBOTO, fontSize: 28, fontWeight: 700, color: '#555555' }}>
-              newshound news
+              {META.brandName.toLowerCase()}
             </span>
             <span style={{ color: '#BBBBBB', fontSize: 26 }}>|</span>
             <span style={{ fontFamily: ROBOTO, fontSize: 28, fontWeight: 400, color: '#888888' }}>

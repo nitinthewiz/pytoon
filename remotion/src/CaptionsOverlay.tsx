@@ -3,6 +3,7 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import { createTikTokStyleCaptions } from '@remotion/captions';
 import { CAPTION_TOP } from './layout';
 import { ROBOTO } from './fonts';
+import { COLORS } from './production';
 import { type CompositionProps } from './types';
 
 export const CaptionsOverlay: React.FC<CompositionProps> = ({ captions }) => {
@@ -46,7 +47,7 @@ export const CaptionsOverlay: React.FC<CompositionProps> = ({ captions }) => {
                   fontSize: 86,
                   fontWeight: 900,
                   lineHeight: 1.22,
-                  color: isActive ? '#FFE81A' : '#FFFFFF',
+                  color: isActive ? COLORS.captionActive : COLORS.captionBase,
                   textShadow:
                     '-6px -6px 0 #000, 6px -6px 0 #000, -6px 6px 0 #000, 6px 6px 0 #000, 0 0 12px rgba(0,0,0,0.4)',
                   whiteSpace: 'pre',
