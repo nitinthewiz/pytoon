@@ -36,7 +36,7 @@ GitHub Actions (self-hosted Windows runner)
   →                           #   captions; emits composite.json (timeline + music)
   → python main.py             # pytoon: renders avatar over a MAGENTA key → avatar.mp4
   → node compose.js            # data-driven ffmpeg composite: background + keyed avatar
-  →                           #   + keyed captions + narration + looped music bed
+  →                           #   + keyed captions + narration + per-scene music/stings
   → uploads artifact + posts to Telegram
 ```
 

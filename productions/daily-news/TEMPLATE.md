@@ -72,11 +72,18 @@ One continuous narration (`speech.mp3` + Kokoro `captions.json`) is the spine.
 - Per-story slide durations come from the **caption word-times** (`build_background.js
   → computeSegmentDurations`), so each story slide holds exactly while James talks
   about it. Story `[ITEM:N]` markers map narration → news item.
-- `compose.js` offsets the avatar + captions + audio to the narration start and mixes
-  the music bed (looped, ~18%) under everything.
+- **Cold-open hook**: `hookOverlapSec` (production.json) starts the narration that many
+  seconds *before* the opening hands off (the first line plays over the splash); the
+  headlines scene shrinks by the same amount so story-1 still lands on the Stories start.
+- `compose.js` offsets the avatar + captions + audio to the narration start and builds
+  a **per-scene music mix** from the scene timeline: opening logo sting, a rundown bed
+  under headlines, an emotion-matched bed per story (`storybed_<emotion>_N`), transition
+  stingers at story cuts, outro bed + sign-off sting under the closing. Variants rotate
+  per run via `audioSeed`. (Classic theme falls back to one looped bed.)
 
 `composite.json` (emitted by `build_background.js`) carries `narrationStartSec`,
-`narrationDurationSec`, key colours, and the music config — `compose.js` is fully
+`narrationDurationSec`, key colours, the scene timeline (`scenes`, `storyBoundaries`,
+`audioSeed`) — or a `music` config for the classic fallback. `compose.js` is fully
 data-driven from it.
 
 ---
@@ -88,7 +95,7 @@ background_video.mp4   Remotion: the full show (all scenes), music-less
   + avatar.mp4         pytoon avatar over a MAGENTA key (swap for D-ID/HeyGen later)
   + captions_overlay   green-keyed caption pop-ons
   + speech.mp3         narration (delayed to narration start)
-  + music bed          looped under everything
+  + scene audio        per-scene beds/stings from assets/audio (classic: one looped bed)
         ↓ compose.js (ffmpeg, data-driven from composite.json)
    animation.mp4        final 9:16 video
 ```
@@ -114,4 +121,3 @@ The n8n `IndiaNews-Hindi` workflow is the first real variant candidate.
 - `take` chyron currently falls back to the raw news title — the script/prompt work
   will feed James's actual *take* per story.
 - Production-folder selection is hard-coded; add a `template` dispatch input.
-- Music bed is one file; will be split into per-scene stings/score later.
