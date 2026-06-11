@@ -13,6 +13,7 @@ import { StoryFullBleed } from './themes/newshound/StoryFullBleed';
 import { FlagClash } from './themes/newshound/beats/FlagClash';
 import { NumberCard } from './themes/newshound/beats/NumberCard';
 import { FxDemo } from './themes/newshound/fx';
+import { StingerWipeDemo } from './themes/newshound/StingerWipe';
 import { NewshoundCaptions } from './themes/newshound/Captions';
 import { Opening as NHOpening } from './themes/newshound/Opening';
 import { Headlines as NHHeadlines } from './themes/newshound/Headlines';
@@ -51,6 +52,7 @@ export const Root: React.FC = () => {
       <Composition id="NHStoryFB" component={StoryFullBleed} durationInFrames={150} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ item: SAMPLE_ITEM, index: 1, total: 5 }} />
       <Composition id="NHFlagClash" component={FlagClash} durationInFrames={90} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ a: 'in', b: 'cn', mode: 'cooperate', labelA: 'INDIA', labelB: 'CHINA' }} />
       <Composition id="NHNumberCard" component={NumberCard} durationInFrames={90} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ value: '20x', label: 'more potent than fentanyl' }} />
+      <Composition id="NHStingerWipe" component={StingerWipeDemo} durationInFrames={60} fps={FPS} width={CANVAS_W} height={CANVAS_H} />
       {/* FX layers — preview each over a sample photo */}
       <Composition id="NHFxScanline" component={FxDemo} durationInFrames={120} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ fx: 'scanline' }} />
       <Composition id="NHFxMesh" component={FxDemo} durationInFrames={120} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ fx: 'mesh' }} />

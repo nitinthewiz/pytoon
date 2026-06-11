@@ -11,6 +11,7 @@ import { NH } from '../newshound';
 import { FPS, SCENE_TRANSITION_FRAMES } from '../../production';
 import { TRANSITION_FRAMES } from '../../layout';
 import { openingFrames, headlinesFrames, storiesFrames, closingFrames } from './Show';
+import { stingerWipe } from './StingerWipe';
 import { type CompositionProps, type NewsItem } from '../../types';
 
 const isTeaser = (it: NewsItem) => it.imagePath === null && (it.teaserImages?.length ?? 0) > 0;
@@ -28,9 +29,12 @@ const StoriesFB: React.FC<CompositionProps> = ({ items }) => {
               <StoryFullBleed item={item} index={i} total={stories.length} ticker={ticker} />
             </TransitionSeries.Sequence>
             {i < stories.length - 1 && (
+              // Branded stinger wipe between stories (timed with the transition
+              // stingers compose.js drops at each storyBoundaries cut). Keep
+              // TRANSITION_FRAMES — build_background's slide timing math uses it.
               <TransitionSeries.Transition
                 timing={linearTiming({ durationInFrames: TRANSITION_FRAMES })}
-                presentation={slide({ direction: i % 2 ? 'from-right' : 'from-bottom' })}
+                presentation={stingerWipe()}
               />
             )}
           </React.Fragment>
