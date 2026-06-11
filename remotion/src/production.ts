@@ -27,6 +27,10 @@ export type Production = {
   fonts: { family: string };
   voice: { tts: string; speed: number };
   scenes: SceneConfig[];
+  // Retention hook: how early (sec) the cold-open narration line starts BEFORE the
+  // opening scene hands off. The headlines scene shrinks by the same amount so
+  // story-1's narration still lands exactly on the Stories scene start.
+  hookOverlapSec?: number;
   avatar: { widthPct: number; cropHeight: number; presentScenes: SceneType[] };
   sceneTransition: { durationFrames: number };
 };
@@ -41,6 +45,7 @@ export const COLORS = PRODUCTION.colors;
 export const META = PRODUCTION.meta;
 export const SCENES = PRODUCTION.scenes;
 export const SCENE_TRANSITION_FRAMES = PRODUCTION.sceneTransition.durationFrames;
+export const HOOK_OVERLAP_FRAMES = Math.round((PRODUCTION.hookOverlapSec ?? 0) * FPS);
 
 export const sceneDurationSec = (type: SceneType): number =>
   PRODUCTION.scenes.find((s) => s.type === type)?.durationSec ?? 0;

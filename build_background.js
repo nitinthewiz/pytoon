@@ -25,32 +25,48 @@ function loadProduction() {
 }
 
 // When the narration (audio + avatar + captions) begins on the show timeline.
-// - newshound: narration covers the Headlines scene (intro teases the rundown),
-//   so it starts when Headlines starts = end of Opening (minus the transition overlap).
+// - newshound: narration covers the Headlines scene (intro teases the rundown)
+//   and, as a retention hook, starts hookOverlapSec BEFORE the opening hands off
+//   (the cold-open line plays over the splash).
 // - classic: narration starts at the Stories scene (after Opening + Headlines).
 function computeNarrationStartSec(prod, introFrames) {
   const pfps = prod.canvas.fps;
   const theme = prod.theme || 'classic';
+  const isNH = theme.startsWith('newshound');
   const dur = (t) => (prod.scenes.find((s) => s.type === t) || {}).durationSec || 0;
   const stf = prod.sceneTransition.durationFrames; // scene-to-scene transition (overlap)
   const openingF = Math.round(dur('opening') * pfps);
+  const hookF = isNH ? Math.round((prod.hookOverlapSec || 0) * pfps) : 0;
 
   // The teaser item carries the intro narration length plus a slide-transition
   // bonus (TRANSITION_FRAMES) baked in by computeSegmentDurations.
   const introNarrFrames = Math.max(0, (introFrames || 0) - TRANSITION_FRAMES);
+
+  // Headlines scene length. MUST mirror headlinesFrames() in
+  // remotion/src/themes/newshound/Show.tsx:
+  //   headlines = introNarration + 2*stf - hook
+  // so that narrationStart = opening - hook AND story-1's narration lands exactly
+  // on the Stories scene start (opening + headlines - 2*stf).
+  const headFrames = isNH && (introFrames || 0) > 0
+    ? Math.max(1, introNarrFrames + 2 * stf - hookF)
+    : (introFrames || 0);
   // Where the Stories scene actually begins on the show timeline (2 scene
   // transitions before it overlap, so subtract 2*stf).
-  const storiesSceneStart = openingF + (introFrames || 0) - 2 * stf;
+  const storiesSceneStart = openingF + headFrames - 2 * stf;
 
   // newshound* themes: narration covers Headlines (intro) → Stories. Offset it so
   // the FIRST story's narration lands exactly on the Stories scene start; the intro
-  // then plays back over the Headlines scene. This keeps every story slide in
-  // lockstep with James — no image rolling in before he's done talking.
+  // then plays back over the Headlines scene (entering the opening splash by the
+  // hook overlap). This keeps every story slide in lockstep with James — no image
+  // rolling in before he's done talking.
   // classic: narration just starts at the Stories scene.
-  const startFrame = theme.startsWith('newshound')
-    ? storiesSceneStart - introNarrFrames
-    : storiesSceneStart;
-  return { fps: pfps, narrationStartSec: Math.max(0, startFrame) / pfps };
+  const startFrame = isNH ? storiesSceneStart - introNarrFrames : storiesSceneStart;
+  return {
+    fps: pfps,
+    narrationStartSec: Math.max(0, startFrame) / pfps,
+    // frame-level pieces, reused by the scene-timeline emission below
+    openingF, headFrames, storiesSceneStartF: storiesSceneStart, stf, isNH,
+  };
 }
 
 async function main() {
@@ -243,7 +259,6 @@ async function main() {
     narrationDurationSec: totalDuration,
     avatarKey: '0xFF00FF',
     captionsKey: '0x00FF00',
-    music: { file: 'assets/News Background Test.m4a', volume: 0.18 },
   };
 
   // fb layout: James is a bottom-left "presenter" — crop to James, scale down,
@@ -253,26 +268,66 @@ async function main() {
     composite.avatar = { crop: '760:704:160:0', scale: 0.64, x: 297, y: 1078 };
   }
 
-  // PLACEHOLDER: pitch-shift the narration per segment so each story sounds
-  // distinct (signals "the audio changed") until real per-segment music exists.
-  // Only for the full-bleed test theme. Narration-relative boundaries from captions.
-  if (theme === 'newshound-fb') {
-    let wi = 0;
-    const segStarts = activeSegments.map(seg => {
-      const c = captions[Math.min(wi, captions.length - 1)];
-      wi += seg.split(/\s+/).filter(Boolean).length;
-      return c ? c.startMs / 1000 : 0;
+  if (narration.isNH) {
+    // --- Scene timeline → compose.js's per-scene audio engine ---------------
+    // Times in SECONDS on the FINAL video timeline. Windows include the
+    // transition overlaps at both ends (scene cuts overlap by stf frames, story
+    // slides by TRANSITION_FRAMES), so adjacent music beds naturally crossfade
+    // when each fades in/out at its window edges.
+    const { openingF, headFrames, storiesSceneStartF, stf } = narration;
+    const f2s = (f) => Number((Math.max(0, f) / narration.fps).toFixed(3));
+    const emotions = loadJson(path.join(__dirname, 'emotions.json')) || [];
+    const storyItems = items.filter((it) => !(it.imagePath === null && it.teaserImages != null));
+    const storiesLenF = Math.max(1, storyItems.reduce((s, it) => s + it.durationInFrames, 0)
+      - Math.max(0, storyItems.length - 1) * TRANSITION_FRAMES);
+    const closingLenF = closingFrames
+      ?? Math.round((((prod.scenes.find((s) => s.type === 'closing') || {}).durationSec) || 0) * narration.fps);
+
+    const scenes = [
+      { type: 'opening', start: 0, end: f2s(openingF) },
+      { type: 'headlines', start: f2s(openingF - stf), end: f2s(openingF - stf + headFrames) },
+    ];
+    const storyBoundaries = []; // cut points between consecutive story slides
+    let cursorF = storiesSceneStartF;
+    storyItems.forEach((it, i) => {
+      const last = i === storyItems.length - 1;
+      // A story is on screen for its full sequence span; the next story's
+      // sequence starts TRANSITION_FRAMES before this one's end (the slide/wipe).
+      const endF = last ? storiesSceneStartF + storiesLenF : cursorF + it.durationInFrames;
+      scenes.push({ type: 'story', start: f2s(cursorF), end: f2s(endF), emotion: emotions[i] || 'explain' });
+      if (!last) {
+        cursorF += it.durationInFrames - TRANSITION_FRAMES;
+        storyBoundaries.push(f2s(cursorF));
+      }
     });
-    const PITCH_CYCLE = [1.06, 0.95, 1.04, 0.96, 1.07]; // per story; intro stays natural
-    composite.pitchSegments = segStarts.map((start, i) => ({
-      start,
-      end: i + 1 < segStarts.length ? segStarts[i + 1] : totalDuration,
-      pitch: i === 0 ? 1.0 : PITCH_CYCLE[(i - 1) % PITCH_CYCLE.length],
-    }));
+    const closingStartF = storiesSceneStartF + storiesLenF - stf;
+    scenes.push({ type: 'closing', start: f2s(closingStartF), end: f2s(closingStartF + closingLenF) });
+
+    composite.scenes = scenes;
+    composite.storyBoundaries = storyBoundaries;
+    composite.audioSeed = computeAudioSeed(speechText);
+  } else {
+    // classic theme — single looped music bed (compose.js fallback path)
+    composite.music = { file: 'assets/News Background Test.m4a', volume: 0.18 };
   }
 
   fs.writeFileSync(COMPOSITE_JSON, JSON.stringify(composite, null, 2));
   console.log(`${bgComp} + captions created. Narration ${composite.narrationStartSec.toFixed(2)}s–${(composite.narrationStartSec + composite.narrationDurationSec).toFixed(2)}s.`);
+}
+
+// Deterministic per-run seed for music-variant rotation: simple charcode sum of
+// the manifest's video_key (runner) or the speech text (local fallback). Same
+// inputs → same variants; different editions → rotated variants.
+function computeAudioSeed(speechText) {
+  let s = '';
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
+    s = String(m.video_key || m.audio || '');
+  } catch { /* no manifest on local runs */ }
+  if (!s) s = String(speechText || '');
+  let sum = 0;
+  for (let i = 0; i < s.length; i++) sum = (sum + s.charCodeAt(i)) % 1000003;
+  return sum;
 }
 
 // Derive per-slide durations from the per-original-word captions array (built by

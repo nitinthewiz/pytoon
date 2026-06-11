@@ -8,7 +8,7 @@ import { Headlines } from './Headlines';
 import { Stories } from './Stories';
 import { Closing } from './Closing';
 import { NH } from '../newshound';
-import { FPS, SCENE_TRANSITION_FRAMES, sceneDurationSec } from '../../production';
+import { FPS, SCENE_TRANSITION_FRAMES, HOOK_OVERLAP_FRAMES, sceneDurationSec } from '../../production';
 import { TRANSITION_FRAMES } from '../../layout';
 import { type CompositionProps, type NewsItem } from '../../types';
 
@@ -19,10 +19,21 @@ export const openingFrames = () => Math.round(sceneDurationSec('opening') * FPS)
 export const closingFrames = (override?: number) => override ?? Math.round(sceneDurationSec('closing') * FPS);
 
 // Headlines runs as long as the intro narration — carried on the teaser item's
-// duration (build_background derives it from the first [ITEM] marker time).
+// duration (build_background derives it from the first [ITEM] marker time; it
+// includes a TRANSITION_FRAMES slide bonus we subtract back out).
+//
+// Hook overlap (retention): the narration starts HOOK_OVERLAP_FRAMES before the
+// opening scene ends, i.e. narrationStart = openingFrames - HOOK_OVERLAP_FRAMES
+// (computeNarrationStartSec in build_background.js). For story-1's narration to
+// still land exactly on the Stories scene start, Headlines must satisfy
+//   opening + headlines - 2*SCENE_TRANSITION = narrationStart + introNarration
+// => headlines = introNarration + 2*SCENE_TRANSITION - HOOK_OVERLAP.
+// Keep this formula in lockstep with computeNarrationStartSec.
 export const headlinesFrames = (items: NewsItem[]) => {
   const teaser = items.find(isTeaser);
-  return teaser?.durationInFrames ?? Math.round(sceneDurationSec('headlines') * FPS);
+  if (!teaser) return Math.round(sceneDurationSec('headlines') * FPS);
+  const introNarrFrames = Math.max(0, teaser.durationInFrames - TRANSITION_FRAMES);
+  return Math.max(1, introNarrFrames + 2 * SCENE_TRANSITION_FRAMES - HOOK_OVERLAP_FRAMES);
 };
 
 export const storiesFrames = (items: NewsItem[]) => {
