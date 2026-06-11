@@ -23,3 +23,7 @@ captions.json
 emotions.json
 composite.json
 speech.wav
+.secrets/
+james_script.json
+speech_pitched.mp3
+.env

@@ -12,6 +12,7 @@ export type SceneConfig = {
 
 export type Production = {
   id: string;
+  theme?: 'classic' | 'newshound' | 'newshound-fb';
   meta: { brandName: string; anchor: string; tagline: string };
   canvas: { width: number; height: number; fps: number };
   colors: {
@@ -31,6 +32,7 @@ export type Production = {
 };
 
 export const PRODUCTION = productionJson as Production;
+export const THEME = PRODUCTION.theme ?? 'classic';
 
 export const CANVAS_W = PRODUCTION.canvas.width;
 export const CANVAS_H = PRODUCTION.canvas.height;

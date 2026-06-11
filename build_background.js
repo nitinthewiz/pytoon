@@ -20,14 +20,37 @@ const TRANSITION_FRAMES = 15;
 // Where the stories scene begins on the Production timeline (seconds). The
 // narration audio, pytoon avatar and captions are all offset to this point so
 // they line up with the stories scene (after Opening + Headlines play).
-function computeStoriesStartSec() {
-  const prod = JSON.parse(fs.readFileSync(PRODUCTION_JSON, 'utf8'));
+function loadProduction() {
+  return JSON.parse(fs.readFileSync(PRODUCTION_JSON, 'utf8'));
+}
+
+// When the narration (audio + avatar + captions) begins on the show timeline.
+// - newshound: narration covers the Headlines scene (intro teases the rundown),
+//   so it starts when Headlines starts = end of Opening (minus the transition overlap).
+// - classic: narration starts at the Stories scene (after Opening + Headlines).
+function computeNarrationStartSec(prod, introFrames) {
   const pfps = prod.canvas.fps;
+  const theme = prod.theme || 'classic';
   const dur = (t) => (prod.scenes.find((s) => s.type === t) || {}).durationSec || 0;
-  const stf = prod.sceneTransition.durationFrames;
-  const startFrame =
-    Math.round(dur('opening') * pfps) + Math.round(dur('headlines') * pfps) - 2 * stf;
-  return { fps: pfps, storiesStartSec: Math.max(0, startFrame) / pfps };
+  const stf = prod.sceneTransition.durationFrames; // scene-to-scene transition (overlap)
+  const openingF = Math.round(dur('opening') * pfps);
+
+  // The teaser item carries the intro narration length plus a slide-transition
+  // bonus (TRANSITION_FRAMES) baked in by computeSegmentDurations.
+  const introNarrFrames = Math.max(0, (introFrames || 0) - TRANSITION_FRAMES);
+  // Where the Stories scene actually begins on the show timeline (2 scene
+  // transitions before it overlap, so subtract 2*stf).
+  const storiesSceneStart = openingF + (introFrames || 0) - 2 * stf;
+
+  // newshound* themes: narration covers Headlines (intro) → Stories. Offset it so
+  // the FIRST story's narration lands exactly on the Stories scene start; the intro
+  // then plays back over the Headlines scene. This keeps every story slide in
+  // lockstep with James — no image rolling in before he's done talking.
+  // classic: narration just starts at the Stories scene.
+  const startFrame = theme.startsWith('newshound')
+    ? storiesSceneStart - introNarrFrames
+    : storiesSceneStart;
+  return { fps: pfps, narrationStartSec: Math.max(0, startFrame) / pfps };
 }
 
 async function main() {
@@ -48,11 +71,23 @@ async function main() {
   // 0-based indices into newsItems; null means fall back to sequential
   const itemNewsIndices = itemMatches.map(m => (m[1] != null ? parseInt(m[1]) - 1 : null));
 
-  const allSegments = speechText.split(/\[ITEM(?::\d+)?\]/).map(s => s.trim()).filter(Boolean);
+  // Per-story enrichment from the new pipeline (optional — falls back gracefully).
+  const loadJson = (f) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+  const takes = loadJson(path.join(__dirname, 'takes.json'));
+  const teasers = loadJson(path.join(__dirname, 'teasers.json'));
+  const tags = loadJson(path.join(__dirname, 'tags.json'));
+  const visualsArr = loadJson(path.join(__dirname, 'visuals.json'));
+
+  // [CLOSE] marks the sign-off → its own Closing scene (so "Thank you…" no longer
+  // plays over the last story). Split on both markers; the trailing piece is the close.
+  const hasClose = /\[CLOSE\]/.test(speechText);
+  const allSegments = speechText.split(/\[ITEM(?::\d+)?\]|\[CLOSE\]/).map(s => s.trim()).filter(Boolean);
+  const closingSegment = hasClose ? allSegments[allSegments.length - 1] : null;
+  const middleSegments = hasClose ? allSegments.slice(0, -1) : allSegments;
 
   const hasIntro = !speechText.trimStart().startsWith('[ITEM');
-  const introSegment = hasIntro ? allSegments[0] : null;
-  const storySegments = hasIntro ? allSegments.slice(1) : allSegments;
+  const introSegment = hasIntro ? middleSegments[0] : null;
+  const storySegments = hasIntro ? middleSegments.slice(1) : middleSegments;
   const storyNewsIndices = itemNewsIndices;
 
   if (storySegments.length === 0 || newsItems.length === 0) {
@@ -71,26 +106,30 @@ async function main() {
   // itemCount includes the blank intro slide (if any) + story slides
   const itemCount = count + (hasIntro ? 1 : 0);
 
-  // Compute per-slide durations — use Kokoro timestamps when available for precision,
-  // otherwise fall back to word-count proportional estimation.
+  // Build word-level captions FIRST (number-expansion aware), then derive slide
+  // timing from the same per-original-word time mapping — so slides, captions and
+  // narration stay perfectly in lockstep (no drift from "2026" → "twenty twenty-six").
   const kokoroTimestamps = fs.existsSync(CAPTIONS_JSON)
     ? JSON.parse(fs.readFileSync(CAPTIONS_JSON, 'utf8'))
     : null;
+  const captions = kokoroTimestamps
+    ? buildCaptionsFromKokoroWithText(kokoroTimestamps, speechText)
+    : buildCaptionsFromText(speechText, totalDuration * 1000);
 
-  // activeSegments: the text segments that map to actual slides (intro + stories[0..count-1])
+  // activeSegments: intro + stories + closing — each maps to a scene/slide.
   const activeSegments = [
-    ...(hasIntro ? [allSegments[0]] : []),
+    ...(hasIntro ? [middleSegments[0]] : []),
     ...storySegments.slice(0, count),
+    ...(hasClose ? [closingSegment] : []),
   ];
-  const segmentDurations = computeSegmentDurations(
-    kokoroTimestamps, activeSegments, totalDuration, itemCount
-  );
-  // segmentDurations[0] = intro (when hasIntro), then stories follow in order
+  const segmentDurations = computeSegmentDurations(captions, activeSegments, totalDuration);
+  // segmentDurations: [intro?, stories…, closing?]. Closing scene = the last entry.
+  const closingFrames = hasClose ? segmentDurations[segmentDurations.length - 1] : null;
 
   fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
   const items = [];
-  const introSlotIndex = (hasIntro && allSegments[0].split(/\s+/).filter(Boolean).length > 0) ? 0 : -1;
+  const introSlotIndex = (hasIntro && middleSegments[0].split(/\s+/).filter(Boolean).length > 0) ? 0 : -1;
 
   // Placeholder for the intro teaser — filled in after story images are downloaded
   if (introSlotIndex === 0) {
@@ -107,8 +146,13 @@ async function main() {
     const storyMeta = {
       title: newsItem.title || '',
       source: newsItem.source || '',
-      category: newsItem.category || 'Top News',
+      // category badge, chyron take and rundown teaser come from the LLM when present.
+      category: (tags && tags[i]) || newsItem.category || 'Top News',
+      take: (takes && takes[i]) || undefined,
+      teaser: (teasers && teasers[i]) || undefined,
     };
+    // Map the LLM's visual beats; fill the 'photo' beat's src with the local image below.
+    const rawVisuals = visualsArr && visualsArr[i];
 
     if (!newsItem.image) {
       items.push({ imagePath: null, durationInFrames, ...storyMeta });
@@ -128,7 +172,10 @@ async function main() {
       continue;
     }
 
-    items.push({ imagePath: localName, durationInFrames, ...storyMeta });
+    const visuals = rawVisuals && rawVisuals.length
+      ? rawVisuals.map(v => v.type === 'photo' ? { ...v, src: localName } : v)
+      : undefined;
+    items.push({ imagePath: localName, durationInFrames, ...storyMeta, ...(visuals ? { visuals } : {}) });
   }
 
   // Backfill teaserImages on the intro slide with all successfully downloaded story images
@@ -141,63 +188,113 @@ async function main() {
     return;
   }
 
-  const captions = fs.existsSync(CAPTIONS_JSON)
-    ? buildCaptionsFromKokoroWithText(JSON.parse(fs.readFileSync(CAPTIONS_JSON, 'utf8')), speechText)
-    : buildCaptionsFromText(speechText, totalDuration * 1000);
+  // Pick compositions + layout details by the production's theme.
+  const prod = loadProduction();
+  const theme = prod.theme || 'classic';
+  const isNH = theme.startsWith('newshound');
+  const bgComp = theme === 'newshound-fb' ? 'NewshoundShowFB' : theme === 'newshound' ? 'NewshoundShow' : 'Production';
+  const capComp = isNH ? 'NewshoundCaptions' : 'CaptionsOverlay';
+  // Captions sit lower in the fb layout (below the centered presenter).
+  const captionTop = theme === 'newshound-fb' ? 1580 : 1500;
 
-  fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions }, null, 2));
+  // DEMO visuals (only when the LLM didn't supply visuals.json) — crude title heuristics
+  // so the beat renderer is visible locally. Real runs use the passed visuals[].
+  if (theme === 'newshound-fb' && !visualsArr) {
+    const ISO = { india: 'in', china: 'cn', britain: 'gb', british: 'gb', uk: 'gb', senegal: 'sn', america: 'us', american: 'us', 'san francisco': 'us', france: 'fr', germany: 'de', australia: 'au', russia: 'ru', iran: 'ir', israel: 'il', ukraine: 'ua' };
+    for (const it of items) {
+      if (it.imagePath == null || it.teaserImages != null) continue; // skip teaser
+      const t = (it.title || '').toLowerCase();
+      const beats = [{ type: 'photo', src: it.imagePath }];
+      const found = Object.keys(ISO).filter(k => t.includes(k));
+      const uniq = [...new Set(found.map(k => ISO[k]))];
+      if (uniq.length >= 2) beats.push({ type: 'flagclash', a: uniq[0], b: uniq[1], mode: 'cooperate', labelA: found[0].toUpperCase(), labelB: found[1].toUpperCase() });
+      const num = (it.title || '').match(/(\d+(?:\.\d+)?)\s*(x|%)/i);
+      if (num) beats.push({ type: 'number', value: num[1] + num[2], label: (it.title || '').slice(0, 50) });
+      if (beats.length > 1) it.visuals = beats;
+    }
+  }
+
+  fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions, captionTop, closingFrames }, null, 2));
 
   const remotionDir = path.join(__dirname, 'remotion');
   const renderFlags = '--props=../render-props.json --overwrite';
 
-  console.log(`Rendering Production (full show): ${items.length} story slides, ~${totalDuration.toFixed(1)}s narration`);
+  console.log(`Rendering ${bgComp} (theme: ${theme}): ${items.length} slides, ~${totalDuration.toFixed(1)}s narration`);
   execSync(
-    `npx remotion render src/index.tsx Production ../background_video.mp4 ${renderFlags}`,
+    `npx remotion render src/index.tsx ${bgComp} ../background_video.mp4 ${renderFlags}`,
     { cwd: remotionDir, stdio: 'inherit' }
   );
 
   console.log('Rendering captions overlay...');
   execSync(
-    `npx remotion render src/index.tsx CaptionsOverlay ../captions_overlay.mp4 ${renderFlags}`,
+    `npx remotion render src/index.tsx ${capComp} ../captions_overlay.mp4 ${renderFlags}`,
     { cwd: remotionDir, stdio: 'inherit' }
   );
 
   // Emit the composite timeline so compose.js can stack the layers data-driven.
-  const composite = computeStoriesStartSec();
-  const storiesFrames =
-    items.reduce((s, it) => s + it.durationInFrames, 0) -
-    Math.max(0, items.length - 1) * TRANSITION_FRAMES;
-  composite.storiesDurationSec = storiesFrames / composite.fps;
-  fs.writeFileSync(
-    COMPOSITE_JSON,
-    JSON.stringify({ ...composite, avatarKey: '0xFF00FF', captionsKey: '0x00FF00' }, null, 2),
-  );
-  console.log(`Production background + captions created. Stories ${composite.storiesStartSec.toFixed(2)}s–${(composite.storiesStartSec + composite.storiesDurationSec).toFixed(2)}s.`);
+  // intro narration length (carried on the teaser item) sets where Stories begins
+  // and, for the classic theme, the narration offset.
+  const introFrames = (items[0] && items[0].imagePath === null && (items[0].teaserImages != null))
+    ? items[0].durationInFrames : 0;
+  const narration = computeNarrationStartSec(prod, introFrames);
+  const composite = {
+    fps: narration.fps,
+    narrationStartSec: narration.narrationStartSec,
+    narrationDurationSec: totalDuration,
+    avatarKey: '0xFF00FF',
+    captionsKey: '0x00FF00',
+    music: { file: 'assets/News Background Test.m4a', volume: 0.18 },
+  };
+
+  // fb layout: James is a bottom-left "presenter" — crop to James, scale down,
+  // place over the image's bottom-left (compose.js applies the transform).
+  if (theme === 'newshound-fb') {
+    // James as a CENTERED bottom presenter, ~10% bigger than the first pass.
+    composite.avatar = { crop: '760:704:160:0', scale: 0.64, x: 297, y: 1078 };
+  }
+
+  // PLACEHOLDER: pitch-shift the narration per segment so each story sounds
+  // distinct (signals "the audio changed") until real per-segment music exists.
+  // Only for the full-bleed test theme. Narration-relative boundaries from captions.
+  if (theme === 'newshound-fb') {
+    let wi = 0;
+    const segStarts = activeSegments.map(seg => {
+      const c = captions[Math.min(wi, captions.length - 1)];
+      wi += seg.split(/\s+/).filter(Boolean).length;
+      return c ? c.startMs / 1000 : 0;
+    });
+    const PITCH_CYCLE = [1.06, 0.95, 1.04, 0.96, 1.07]; // per story; intro stays natural
+    composite.pitchSegments = segStarts.map((start, i) => ({
+      start,
+      end: i + 1 < segStarts.length ? segStarts[i + 1] : totalDuration,
+      pitch: i === 0 ? 1.0 : PITCH_CYCLE[(i - 1) % PITCH_CYCLE.length],
+    }));
+  }
+
+  fs.writeFileSync(COMPOSITE_JSON, JSON.stringify(composite, null, 2));
+  console.log(`${bgComp} + captions created. Narration ${composite.narrationStartSec.toFixed(2)}s–${(composite.narrationStartSec + composite.narrationDurationSec).toFixed(2)}s.`);
 }
 
-// Derive per-slide durations from Kokoro word timestamps.
-// Uses cumulative word count to map each segment's first word to its token index,
-// then measures the actual elapsed time between segment boundaries.
-// Falls back to word-count proportional estimation when timestamps are unavailable.
-function computeSegmentDurations(timestamps, segments, totalDuration, itemCount) {
-  const totalTransitionFrames = Math.max(0, itemCount - 1) * TRANSITION_FRAMES;
-  const availableFrames = Math.ceil(totalDuration * FPS) + totalTransitionFrames;
-
-  if (!timestamps || timestamps.length === 0) {
-    const totalWords = segments.reduce((s, seg) => s + seg.split(/\s+/).filter(Boolean).length, 0);
+// Derive per-slide durations from the per-original-word captions array (built by
+// buildCaptionsFromKokoroWithText, so it already handles number-expansion drift).
+// Each segment's first word maps 1:1 to a caption entry, giving an exact start
+// time — the same mapping the on-screen captions use, so slides never drift from
+// the narration. Falls back to word-count proportions when captions are empty.
+function computeSegmentDurations(captions, segments, totalDuration) {
+  if (!captions || captions.length === 0) {
+    const availableFrames = Math.ceil(totalDuration * FPS) + Math.max(0, segments.length - 1) * TRANSITION_FRAMES;
+    const totalWords = segments.reduce((s, seg) => s + seg.split(/\s+/).filter(Boolean).length, 0) || 1;
     return segments.map(seg => {
       const wc = seg.split(/\s+/).filter(Boolean).length;
       return Math.max(FPS, Math.round((wc / totalWords) * availableFrames));
     });
   }
 
-  // Filter to word tokens (Kokoro emits punctuation as separate tokens)
-  const wordTokens = timestamps.filter(t => /\w/.test(t.word));
-
-  // Walk each segment, recording the token index where it starts
+  // captions[i] corresponds to the i-th original (cleaned-text) word, in order.
   let wordIdx = 0;
   const segStartSecs = segments.map(seg => {
-    const startSec = wordTokens[Math.min(wordIdx, wordTokens.length - 1)]?.start_time ?? 0;
+    const c = captions[Math.min(wordIdx, captions.length - 1)];
+    const startSec = c ? c.startMs / 1000 : 0;
     wordIdx += seg.split(/\s+/).filter(Boolean).length;
     return startSec;
   });
@@ -220,7 +317,7 @@ function computeSegmentDurations(timestamps, segments, totalDuration, itemCount)
 // Kokoro tokens until the next original word is recognised, spanning all the expansion
 // tokens and using their combined start→end as the display timing for that one word.
 function buildCaptionsFromKokoroWithText(timestamps, speechText) {
-  const clean = speechText.replace(/\[ITEM(?::\d+)?\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = speechText.replace(/\[(?:ITEM(?::\d+)?|CLOSE)\]/g, ' ').replace(/\s+/g, ' ').trim();
   const origWords = clean.split(' ').filter(Boolean);
   if (origWords.length === 0) return [];
 
@@ -272,7 +369,7 @@ function buildCaptionsFromKokoroWithText(timestamps, speechText) {
 }
 
 function buildCaptionsFromText(text, totalDurationMs) {
-  const clean = text.replace(/\[ITEM(?::\d+)?\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = text.replace(/\[(?:ITEM(?::\d+)?|CLOSE)\]/g, ' ').replace(/\s+/g, ' ').trim();
   const words = clean.split(' ').filter(Boolean);
   if (words.length === 0) return [];
 

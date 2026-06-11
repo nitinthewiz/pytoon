@@ -10,20 +10,13 @@ on:
         description: 'The audio file name to use'
         required: false
         default: 'speech.mp3'
-      news_b64:
-        description: 'Base64-encoded JSON array of news items with images'
-        required: false
-        default: ''
-      speech_b64:
-        description: 'Base64-encoded speech text with [ITEM] delimiters'
-        required: false
-        default: ''
-      captions_b64:
-        description: 'Base64-encoded word timestamps JSON from Kokoro TTS'
-        required: false
-        default: ''
-      emotions_b64:
-        description: 'Base64-encoded JSON array of emotion strings, one per story'
+      # v2 contract: ONE manifest replaces the per-field b64 inputs. JSON shape:
+      # { version, production, edition:{country,edition,date,tz}, channels:{...},
+      #   callback_url, video_key, news:[5 selected items], speech, captions,
+      #   emotions, takes, teasers, tags, visuals }
+      # [ITEM:N] markers in speech are 1-based indices into manifest.news.
+      manifest_b64:
+        description: 'Base64 JSON manifest with all show data (v2 contract)'
         required: false
         default: ''
 
@@ -58,41 +51,26 @@ jobs:
       run: |
         ${{ secrets.MINIO_MC_PATH }}\mc get myminio/${{ secrets.MINIO_BUCKET_NAME }}/${{ inputs.audio_input }} ./speech.mp3
 
-    - name: Decode news JSON
-      if: ${{ inputs.news_b64 != '' }}
+    - name: Decode manifest (v2 contract — writes all per-field files)
+      if: ${{ inputs.manifest_b64 != '' }}
       shell: pwsh
       env:
-        NEWS_B64: ${{ inputs.news_b64 }}
+        MANIFEST_B64: ${{ inputs.manifest_b64 }}
       run: |
-        $bytes = [System.Convert]::FromBase64String($env:NEWS_B64)
-        [System.IO.File]::WriteAllBytes((Join-Path $PWD 'news.json'), $bytes)
-
-    - name: Decode speech text
-      if: ${{ inputs.speech_b64 != '' }}
-      shell: pwsh
-      env:
-        SPEECH_B64: ${{ inputs.speech_b64 }}
-      run: |
-        $bytes = [System.Convert]::FromBase64String($env:SPEECH_B64)
-        [System.IO.File]::WriteAllBytes((Join-Path $PWD 'speech.txt'), $bytes)
-
-    - name: Decode captions timestamps
-      if: ${{ inputs.captions_b64 != '' }}
-      shell: pwsh
-      env:
-        CAPTIONS_B64: ${{ inputs.captions_b64 }}
-      run: |
-        $bytes = [System.Convert]::FromBase64String($env:CAPTIONS_B64)
-        [System.IO.File]::WriteAllBytes((Join-Path $PWD 'captions.json'), $bytes)
-
-    - name: Decode emotions
-      if: ${{ inputs.emotions_b64 != '' }}
-      shell: pwsh
-      env:
-        EMOTIONS_B64: ${{ inputs.emotions_b64 }}
-      run: |
-        $bytes = [System.Convert]::FromBase64String($env:EMOTIONS_B64)
-        [System.IO.File]::WriteAllBytes((Join-Path $PWD 'emotions.json'), $bytes)
+        $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:MANIFEST_B64))
+        [System.IO.File]::WriteAllText((Join-Path $PWD 'manifest.json'), $json)
+        $m = $json | ConvertFrom-Json
+        # Write the individual files the renderer scripts consume.
+        # NOTE: -Depth 64 matters — ConvertTo-Json default depth (2) silently truncates.
+        if ($m.news)     { $m.news     | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'news.json' }
+        if ($m.speech)   { $m.speech   | Set-Content -Encoding UTF8 'speech.txt' }
+        if ($m.captions) { $m.captions | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'captions.json' }
+        if ($m.emotions) { $m.emotions | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'emotions.json' }
+        if ($m.takes)    { $m.takes    | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'takes.json' }
+        if ($m.teasers)  { $m.teasers  | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'teasers.json' }
+        if ($m.tags)     { $m.tags     | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'tags.json' }
+        if ($m.visuals)  { $m.visuals  | ConvertTo-Json -Depth 64 -Compress | Set-Content -Encoding UTF8 'visuals.json' }
+        Write-Host "Manifest decoded: $($m.production) / $($m.edition.country)-$($m.edition.edition), $($m.news.Count) stories"
 
     - name: Set up Node.js
       uses: actions/setup-node@v6
@@ -122,7 +100,7 @@ jobs:
       working-directory: remotion
 
     - name: Build background video
-      if: ${{ inputs.news_b64 != '' }}
+      if: ${{ inputs.manifest_b64 != '' }}
       run: node build_background.js
 
     - name: Run pytoon
@@ -139,7 +117,7 @@ jobs:
         path: animation.mp4
 
     - name: Upload background video for fallback re-use
-      if: ${{ inputs.news_b64 != '' }}
+      if: ${{ inputs.manifest_b64 != '' }}
       uses: actions/upload-artifact@v4
       with:
         name: background_video.mp4
@@ -153,3 +131,33 @@ jobs:
         chat_id: ${{ secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID }}
         path: animation.mp4
         method: sendVideo
+
+    # ---- v2 publish-back loop ----
+    # The manifest carries video_key (where to put the video in MinIO) and
+    # callback_url (the n8n "4. Publish - Newshound" webhook). n8n then posts the
+    # video to the edition's enabled channels. Safe no-ops when manifest is absent.
+    - name: Upload final video to MinIO for publishing
+      if: ${{ success() && inputs.manifest_b64 != '' }}
+      shell: pwsh
+      run: |
+        $m = Get-Content 'manifest.json' -Raw | ConvertFrom-Json
+        if ($m.video_key) {
+          & "${{ secrets.MINIO_MC_PATH }}\mc" cp animation.mp4 "myminio/${{ secrets.MINIO_BUCKET_NAME }}/$($m.video_key)" --insecure
+          Write-Host "Video uploaded to MinIO as $($m.video_key)"
+        } else { Write-Host "No video_key in manifest - skipping MinIO upload" }
+
+    - name: Notify n8n render-complete webhook
+      if: ${{ success() && inputs.manifest_b64 != '' }}
+      shell: pwsh
+      env:
+        MANIFEST_B64: ${{ inputs.manifest_b64 }}
+      run: |
+        $m = Get-Content 'manifest.json' -Raw | ConvertFrom-Json
+        if ($m.callback_url) {
+          $body = @{ status = 'success'; video_key = $m.video_key;
+                     run_id = $env:GITHUB_RUN_ID; manifest_b64 = $env:MANIFEST_B64 } | ConvertTo-Json -Compress
+          try {
+            Invoke-RestMethod -Method Post -Uri $m.callback_url -Body $body -ContentType 'application/json' | Out-Null
+            Write-Host "n8n callback OK -> $($m.callback_url)"
+          } catch { Write-Host "n8n callback FAILED: $($_.Exception.Message)" }
+        } else { Write-Host "No callback_url in manifest - skipping webhook" }

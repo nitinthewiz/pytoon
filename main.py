@@ -55,12 +55,13 @@ def build_emotion_schedule(speech_text, captions, emotions):
     each [ITEM:N] segment starts, then assigns the LLM-chosen emotion to that
     time range. The intro always gets 'explain'.
     """
-    segments = re.split(r'\[ITEM(?::\d+)?\]', speech_text)
+    segments = re.split(r'\[ITEM(?::\d+)?\]|\[CLOSE\]', speech_text)
     segments = [s.strip() for s in segments if s.strip()]
     if not segments:
         return []
 
     has_intro = not speech_text.strip().startswith('[ITEM')
+    has_close = '[CLOSE]' in speech_text
 
     # Filter to word tokens only (Kokoro emits punctuation as separate tokens)
     word_toks = [t for t in captions if re.search(r'\w', t['word'])]
@@ -94,6 +95,11 @@ def build_emotion_schedule(speech_text, captions, emotions):
         end_sec = seg_start_times[seg_idx + 1] if seg_idx + 1 < len(seg_start_times) else total_duration
         schedule.append((start_sec, end_sec, emotion))
 
+    # Closing sign-off segment ([CLOSE]) → a cheerful 'happy' for the wave-off.
+    if has_close:
+        close_idx = len(segments) - 1
+        schedule.append((seg_start_times[close_idx], total_duration, 'happy'))
+
     return schedule
 
 
@@ -101,7 +107,7 @@ transcript = None
 speech_text_raw = None
 if os.path.exists("speech.txt"):
     speech_text_raw = open("speech.txt", encoding="utf-8").read()
-    clean = re.sub(r'\[ITEM(?::\d+)?\]', ' ', speech_text_raw).strip()
+    clean = re.sub(r'\[ITEM(?::\d+)?\]|\[CLOSE\]', ' ', speech_text_raw).strip()
     transcript = expand_numbers(clean)
 
 emotion_schedule = []

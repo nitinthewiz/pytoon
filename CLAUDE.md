@@ -8,7 +8,15 @@ This file is for AI assistants. It describes how this repo is used in production
 
 This is a forked/extended version of pytoon, adapted into an automated daily news video pipeline. The original library (lip-sync animation) is intact; everything at the root level is the pipeline layer built on top of it.
 
-**Output:** Portrait MP4 (1792×2688, 9:16) — news image slideshow on top, talking cartoon avatar on bottom, word-by-word captions overlaid. Posted to Telegram daily at ~9:30 AM.
+**Output:** Portrait MP4 **1080×1920 (9:16)** — a multi-scene news *show*: **Opening → Headlines → Story segments → Closing**, with the **James Newshound** cartoon avatar keyed into a studio set, word-by-word captions, and a music bed. Posted to Telegram daily.
+
+> **This is now a "production template", not a single slideshow.** Mental model:
+> **Production × Theme × Talent(overlay)** — read **`TEMPLATES.md`** (the concept) and
+> **`productions/daily-news/TEMPLATE.md`** (the technical template) first. Brand:
+> `../News_Programs/James_Newshound/` (`personality.md`, `brand.yaml`, and
+> `PIPELINE_UPGRADES.md` — prompt/asset upgrade plan). Themes: **`newshound`** (studio-box
+> story), **`newshound-fb`** (full-bleed photo + James over a gradient — more immersive),
+> **`classic`** (fallback). Switch via `production.json` `"theme"`. Branch: `news-show-scenes`.
 
 ---
 
@@ -24,11 +32,16 @@ n8n (9:30 AM)
 
 GitHub Actions (self-hosted Windows runner)
   → downloads audio from MinIO
-  → node build_background.js      # Remotion: renders background + captions
-  → python main.py                # pytoon: renders avatar animation
-  → ffmpeg colorkey composite     # overlays captions onto animation
+  → node build_background.js   # Remotion: renders the full show (NewshoundShow) +
+  →                           #   captions; emits composite.json (timeline + music)
+  → python main.py             # pytoon: renders avatar over a MAGENTA key → avatar.mp4
+  → node compose.js            # data-driven ffmpeg composite: background + keyed avatar
+  →                           #   + keyed captions + narration + looped music bed
   → uploads artifact + posts to Telegram
 ```
+
+The avatar is a **keyed overlay layer**, not baked into the background — so pytoon can
+later be swapped for D-ID / HeyGen / etc. by producing a different `avatar.mp4`.
 
 ---
 
@@ -52,17 +65,25 @@ If `news_b64` is empty, Remotion step is skipped and the checked-in `background_
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Entry point: expand numbers, build emotion schedule, run animate(), export |
-| `build_background.js` | Orchestrates Remotion: download images, compute slide timing, render both compositions |
-| `remotion/src/NewsSlideshow.tsx` | Top-half image slideshow with fade/slide/flip transitions |
-| `remotion/src/CaptionsOverlay.tsx` | Green-screen TikTok-style captions (composited in ffmpeg) |
-| `remotion/src/transitions.ts` | Transition animation definitions |
+| `productions/daily-news/production.json` | **The template config** — single source of truth (canvas, theme, brand, voice, scene order) |
+| `productions/daily-news/TEMPLATE.md` | How the production template works + how to make variants |
+| `main.py` | pytoon: expand numbers, build emotion schedule, animate(), export avatar over MAGENTA key → `avatar.mp4` |
+| `build_background.js` | Remotion orchestrator: caption-aligned slide timing, render show + captions by theme, emit `composite.json` |
+| `compose.js` | Data-driven final ffmpeg composite (layers + audio mix), driven by `composite.json` |
+| `remotion/src/production.ts` | Typed loader for `production.json` (canvas, colours, theme); `layout.ts` + `main.py` read it |
+| `remotion/src/themes/newshound/` | **Active theme** — `Opening`, `Headlines`, `Story`/`Stories`, `Closing`, `Captions`, `Show.tsx`, `Furniture.tsx` |
+| `remotion/src/themes/newshound.ts` | Newshound palette + `BRAND` constants (from `brand.yaml`) |
+| `remotion/src/Show.tsx`, `scenes/*`, `NewsSlideshow.tsx` | **classic** theme (fallback) |
+| `remotion/src/CaptionsOverlay.tsx` | classic green-screen captions (newshound has its own `Captions.tsx`) |
+| `remotion/public/james*.png` | James mascot stills (pytoon poses) for Opening/Closing |
 | `pytoon/animator.py` | Core animation engine: pose sequencing, frame compositing, export |
 | `pytoon/lipsync.py` | Forced alignment → viseme sequences |
 | `pytoon/dataloader.py` | Loads pose_data.json, emotion/pose/mouth coordinate structs |
 | `pytoon/assets/pose_data.json` | 6 emotions × ~7 poses each |
 | `pronunciation.json` | Kokoro pronunciation overrides (applied as Markdown IPA in n8n before TTS) |
 | `DECISIONS.md` | Running log of architectural decisions and alternatives evaluated |
+
+Local end-to-end run (Mac): venv in `venv/` (py3.13, needs `torchcodec`); `node build_background.js` → `venv/bin/python main.py` → `node compose.js` → `animation.mp4`. Inputs (`news.json`/`speech.txt`/`captions.json`/`emotions.json`/`speech.mp3`) are gitignored; pull real ones from an n8n execution (see git history / the n8n MCP).
 
 ---
 
@@ -79,37 +100,47 @@ If `news_b64` is empty, Remotion step is skipped and the checked-in `background_
 
 **Emotions:** explain, happy, rhetorical, sad, angry, confused
 
-**Export:** avatar overlaid on background video, scaled to 75% of canvas width (810px), centred horizontally, cropped to 640px height, anchored to the top of the avatar zone. The 135px of studio background visible on each side prevents the character from appearing squat/wide.
+**Export (`main.py`):** avatar is rendered over a **magenta key** (`#FF00FF`), NOT baked
+over the news background — sized to 75% of canvas width (810px), centred, cropped to the
+704px avatar zone, anchored top. `compose.js` keys out the magenta and stacks it onto the
+Remotion background at the narration offset. Magenta avoids the captions' green key and
+the character art. (Canvas/avatar values come from `production.json`.)
 
 ---
 
-## Remotion compositions
+## Remotion compositions (canvas **1080×1920** @ 30 FPS)
 
-Canvas is **1792×2688 (9:16)** @ 30 FPS, scaled from the original ToonVertical2.svg (1080×2355) at factor 0.8152. All layout constants are in `remotion/src/layout.ts`.
+Geometry constants are in `remotion/src/layout.ts`; canvas + colours come from
+`production.ts` (→ `production.json`). The avatar zone is the **top 704px**
+(`AVATAR_ZONE_H`) — narration scenes keep it as a studio backdrop for the keyed avatar.
 
-**`NewsSlideshow`**:
-- `0–640px` (AVATAR_ZONE_H): studio background behind avatar — static, no Remotion content
-- `640–873px`: white headline card (flexbox-centred text, Impact font, 58px) overlapping a green accent bar; card floats over the top of the news image
-- `803px–bottom` (IMAGE_Y): news image zone
-- Bottom 72px (BOTTOM_BAR_H): static ticker bar — "AMOS NEWS | [date] | AM/PM EDITION" — always visible, rendered over all slides
-- "TOP NEWS" green badge pinned top-left at y=600px
-- `TransitionSeries` with transitions selected deterministically (`i % APPROVED_TRANSITIONS.length`); 15-frame crossfade between slides (TRANSITION_FRAMES)
+The active theme is **newshound** (`remotion/src/themes/newshound/`), assembled by
+`Show.tsx` as a `TransitionSeries`: **Opening → Headlines → Stories → Closing**.
 
-**`CaptionsOverlay`** (same dimensions):
-- Green screen background (`#00FF00`) for ffmpeg `colorkey` compositing
-- Words grouped into pages (within 1200ms windows)
-- Active word: yellow `#FFE81A`; others: white
-- Positioned at y=1480px (CAPTION_TOP — avatar chest level)
+- **`NewshoundShow`** (id) — the full show. `build_background.js` renders this for newshound.
+- **Opening** — charcoal cold-open: James mascot, NEWSHOUND/NEWS wordmark, tagline (music only).
+- **Headlines** — "THE RUNDOWN": studio zone (avatar) + numbered rundown list; plays under the intro narration.
+- **Story** (one per news item, in `Stories`) — studio/avatar zone, LIVE + category bugs, "JAMES NEWSHOUND // THE TAKE" lower-third + all-caps chyron (`item.take ?? title`), Ken-Burns news image, story-progress pips, scrolling ticker.
+- **Closing** — James + "STAY SKEPTICAL." sign-off.
+- **`NewshoundCaptions`** — green-screen (`#00FF00`) caption pop-ons; Inter heavy, active word = Newshound Yellow `#FFC01E`, ink outline; positioned at `CAPTION_TOP`.
+
+Classic theme (`Production`, `NewsSlideshow`, `CaptionsOverlay`, `scenes/*`) is kept as a fallback.
 
 ---
 
-## Slide timing algorithm (`build_background.js`)
+## Slide timing & narration alignment (`build_background.js`)
 
-Uses `captions.json` (Kokoro word timestamps):
-1. Strip `[ITEM:N]` markers to get plain words; count words per segment
-2. Map cumulative word count → Kokoro token index at each segment boundary
-3. Read `start_time` of first token in each segment → slide start in seconds → frames at 30 FPS
-4. Add `TRANSITION_FRAMES` (15) overlap between slides
+The whole show rides one narration (`speech.mp3` + Kokoro `captions.json`):
+
+1. Captions are built **first** (`buildCaptionsFromKokoroWithText`) — one entry per
+   original word, number-expansion-aware.
+2. `computeSegmentDurations` reads each `[ITEM:N]` segment's first word straight from
+   that captions array → exact start times. **This is what keeps each story slide on
+   screen exactly while James talks about it** (no drift from "2026" → "twenty twenty-six").
+3. Newshound narration **starts at the Headlines scene** (intro teases the rundown);
+   the offset is set so story-1's narration lands on the Stories-scene start. `compose.js`
+   delays the avatar/captions/audio by `narrationStartSec` and bounds them to the
+   narration window (so pytoon's ~2s over-run doesn't bleed into Closing).
 
 Fallback (no captions.json): proportional word-count allocation.
 

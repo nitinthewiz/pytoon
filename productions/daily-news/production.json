@@ -1,5 +1,6 @@
 {
   "id": "daily-news",
+  "theme": "newshound-fb",
   "meta": {
     "brandName": "Newshound News",
     "anchor": "James Newshound",
@@ -18,10 +19,10 @@
   "fonts": { "family": "Roboto" },
   "voice": { "tts": "bm_daniel(0.3)+am_santa(0.3)+af_sarah(0.3)", "speed": 1 },
   "scenes": [
-    { "type": "opening", "durationSec": 3 },
+    { "type": "opening", "durationSec": 4 },
     { "type": "headlines", "durationSec": 6 },
     { "type": "stories" },
-    { "type": "closing", "durationSec": 3 }
+    { "type": "closing", "durationSec": 4 }
   ],
   "avatar": {
     "widthPct": 0.75,
