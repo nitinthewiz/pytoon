@@ -120,7 +120,10 @@ function main() {
     audioParts.push('[bed]'); i++;
   }
   if (audioParts.length === 2) {
-    filters.push(`${audioParts.join('')}amix=inputs=2:duration=longest:normalize=0[aud]`);
+    // NOTE: amix's `normalize` option needs ffmpeg>=5 (the Windows runner has 4.x).
+    // Portable equivalent: amix halves both inputs (1/n), so boost back with volume=2.
+    // High dropout_transition keeps the bed from ramping up after the narration ends.
+    filters.push(`${audioParts.join('')}amix=inputs=2:duration=longest:dropout_transition=600,volume=2[aud]`);
     map.push('-map', '[aud]');
   } else if (audioParts.length === 1) {
     // single source — relabel to [aud]
