@@ -78,14 +78,14 @@ jobs:
         node-version: '20'
 
     - name: Cache Remotion Chrome Headless Shell
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~\.cache\puppeteer
         key: remotion-chrome-${{ hashFiles('remotion/package-lock.json') }}
 
     - name: Cache Remotion node_modules
       id: cache-remotion
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: remotion/node_modules
         key: remotion-${{ hashFiles('remotion/package-lock.json') }}
@@ -111,21 +111,21 @@ jobs:
       run: node compose.js
 
     - name: Upload animation to github actions results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: animation.mp4
         path: animation.mp4
 
     - name: Upload background video for fallback re-use
       if: ${{ inputs.manifest_b64 != '' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: background_video.mp4
         path: background_video.mp4
 
-    - name: Upload video file to telegram using xireiki/channel-post@v1
+    - name: Upload video file to telegram using xireiki/channel-post@v2
       if: ${{ success() }}
-      uses: xireiki/channel-post@v1
+      uses: xireiki/channel-post@v2
       with:
         bot_token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
         chat_id: ${{ secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID }}
