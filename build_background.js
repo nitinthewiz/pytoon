@@ -346,13 +346,34 @@ function computeSegmentDurations(captions, segments, totalDuration) {
   }
 
   // captions[i] corresponds to the i-th original (cleaned-text) word, in order.
+  const wordCounts = segments.map(seg => seg.split(/\s+/).filter(Boolean).length);
   let wordIdx = 0;
-  const segStartSecs = segments.map(seg => {
-    const c = captions[Math.min(wordIdx, captions.length - 1)];
-    const startSec = c ? c.startMs / 1000 : 0;
-    wordIdx += seg.split(/\s+/).filter(Boolean).length;
+  const segStartSecs = segments.map((seg, i) => {
+    // null = mapping ran out of captions (captions array shorter than the
+    // script — should not happen now that buildCaptionsFromKokoroWithText
+    // always emits one caption per word, but never trust it blindly).
+    const startSec = wordIdx < captions.length ? captions[wordIdx].startMs / 1000 : null;
+    wordIdx += wordCounts[i];
     return startSec;
   });
+
+  // Safety net: spread any unmapped tail segments across the remaining audio
+  // by word count, and force starts monotonic — a degenerate caption mapping
+  // must never collapse the show into minimum-length slides + a frozen closing
+  // (the 2026-06-11 us-AM on-air failure).
+  const firstBad = segStartSecs.indexOf(null);
+  if (firstBad > 0) {
+    const base = segStartSecs[firstBad - 1];
+    const tailWords = wordCounts.slice(firstBad - 1).reduce((a, b) => a + b, 0) || 1;
+    let acc = base;
+    for (let i = firstBad; i < segStartSecs.length; i++) {
+      acc += (wordCounts[i - 1] / tailWords) * Math.max(0, totalDuration - base);
+      segStartSecs[i] = acc;
+    }
+  }
+  for (let i = 1; i < segStartSecs.length; i++) {
+    segStartSecs[i] = Math.max(segStartSecs[i], segStartSecs[i - 1]);
+  }
 
   return segStartSecs.map((startSec, i) => {
     const endSec = i + 1 < segStartSecs.length ? segStartSecs[i + 1] : totalDuration;
@@ -367,10 +388,17 @@ function computeSegmentDurations(captions, segments, totalDuration) {
 // Build captions using original speech text for display (preserving numbers like "2026"
 // and punctuation like commas) but Kokoro token timestamps for timing.
 //
-// Kokoro expands numbers to spoken words ("2026" → "twenty twenty six"), so its tokens
-// don't map 1-to-1 with original words. For words containing digits we greedily consume
-// Kokoro tokens until the next original word is recognised, spanning all the expansion
-// tokens and using their combined start→end as the display timing for that one word.
+// Kokoro expands one written word into several spoken tokens ("2026" → "twenty
+// twenty-six"), and voices NO token at all for pure-punctuation words (the spunky
+// scripts' standalone "-" aside markers), so tokens don't map 1-to-1 with original
+// words. Per word: when the IMMEDIATE next word has recognisable alpha content, scan
+// a BOUNDED window ahead for its first token and let this word span everything before
+// it (this both covers expansions and re-syncs any drift). The bound is the critical
+// safety property: the 2026-06-11 us-AM edition drifted one token (a "-" aside),
+// then the unbounded hunt for "times" after "18" swallowed every remaining token —
+// captions froze on "18" and every later scene collapsed (the on-air "scenes blast
+// by, last screen frozen" failure). If the anchor isn't found within the window,
+// consume exactly one token and let the next word re-sync — NEVER eat the tail.
 function buildCaptionsFromKokoroWithText(timestamps, speechText) {
   const clean = speechText.replace(/\[(?:ITEM(?::\d+)?|CLOSE)\]/g, ' ').replace(/\s+/g, ' ').trim();
   const origWords = clean.split(' ').filter(Boolean);
@@ -380,44 +408,69 @@ function buildCaptionsFromKokoroWithText(timestamps, speechText) {
   const wordToks = timestamps.filter(t => /\w/.test(t.word));
   if (wordToks.length === 0) return [];
 
+  const alphaOf = (s) => s.replace(/[^a-zA-Z]/g, '').toLowerCase();
+  // Max tokens one word may span while hunting for the next word's first token.
+  // A long number ("$1,234,567,890.25") expands to ~10 tokens; anything past
+  // this window means the anchor is simply not ahead of us.
+  const RESYNC_WINDOW = 15;
+
   const result = [];
+  const push = (wi, startMs, endMs) => result.push({
+    text: wi === 0 ? origWords[wi] : ` ${origWords[wi]}`,
+    startMs,
+    endMs,
+    timestampMs: (startMs + endMs) / 2,
+    confidence: 1,
+  });
   let ti = 0;
+  let lastEndMs = 0;
 
   for (let wi = 0; wi < origWords.length; wi++) {
-    if (ti >= wordToks.length) break;
-
-    const origWord = origWords[wi];
-    const startMs = wordToks[ti].start_time * 1000;
-    let endMs = wordToks[ti].end_time * 1000;
-
-    if (/\d/.test(origWord) && wi + 1 < origWords.length) {
-      // This word contains digits — Kokoro will have expanded it to multiple tokens.
-      // Consume tokens until we find the start of the next original word.
-      const nextBase = origWords[wi + 1].replace(/[^a-zA-Z]/g, '').toLowerCase();
-      const prefixLen = Math.min(nextBase.length, 4);
-      ti++;
-      // Only greedily consume when the next word has recognisable alpha content.
-      // If nextBase is empty (next word is also a digit/punctuation), the while loop
-      // would never break and consume every remaining token — killing all captions.
-      if (prefixLen >= 2) {
-        while (ti < wordToks.length) {
-          const tok = wordToks[ti].word.toLowerCase().replace(/[^a-z]/g, '');
-          if (tok === nextBase || tok.startsWith(nextBase.slice(0, prefixLen))) break;
-          endMs = wordToks[ti].end_time * 1000;
-          ti++;
-        }
-      }
-    } else {
-      ti++;
+    // Words the TTS never voices ("-", "—", "..."): consume NO token — a
+    // zero-width slot keeps the 1-original-word == 1-caption invariant without
+    // shifting the timing of the words that follow. (\p{L}\p{N}: any-script
+    // letters count as voiced — Hindi productions must not hit this branch.)
+    if (!/[\p{L}\p{N}]/u.test(origWords[wi])) {
+      push(wi, lastEndMs, lastEndMs);
+      continue;
     }
 
-    result.push({
-      text: wi === 0 ? origWord : ` ${origWord}`,
-      startMs,
-      endMs,
-      timestampMs: (startMs + endMs) / 2,
-      confidence: 1,
-    });
+    // Timestamps ended before the script did (bad TTS output) — spread the
+    // leftover words across the remaining audio instead of dropping them, so
+    // every original word still gets a caption and downstream slide timing
+    // (computeSegmentDurations) can never collapse.
+    if (ti >= wordToks.length) {
+      const audioEndMs = wordToks[wordToks.length - 1].end_time * 1000;
+      const step = Math.max(0, audioEndMs - lastEndMs) / (origWords.length - wi);
+      for (let j = wi; j < origWords.length; j++) {
+        const s = lastEndMs + (j - wi) * step;
+        push(j, s, s + step);
+      }
+      break;
+    }
+
+    const startMs = wordToks[ti].start_time * 1000;
+    let endMs = wordToks[ti].end_time * 1000;
+    let consume = 1;
+
+    // Anchor = the IMMEDIATE next word only. Scanning past a digit/punctuation
+    // neighbour for a farther anchor would let "7," swallow "2026"'s expansion.
+    const nextBase = wi + 1 < origWords.length ? alphaOf(origWords[wi + 1]) : '';
+    if (nextBase.length >= 2) {
+      const prefix = nextBase.slice(0, Math.min(nextBase.length, 4));
+      for (let k = ti + 1; k < wordToks.length && k - ti <= RESYNC_WINDOW; k++) {
+        const tok = alphaOf(wordToks[k].word);
+        if (tok === nextBase || (tok && tok.startsWith(prefix))) {
+          endMs = wordToks[k - 1].end_time * 1000;
+          consume = k - ti;
+          break;
+        }
+      }
+    }
+
+    ti += consume;
+    push(wi, startMs, endMs);
+    lastEndMs = endMs;
   }
 
   return result;

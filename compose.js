@@ -58,7 +58,9 @@ const EMOTION_TO_BED = { angry: 'angry', sad: 'sad', happy: 'happy', explain: 'e
 const TRANSITION_STINGS = ['transition1.mp3', 'transition2.mp3'];
 const SIGNOFFS = ['SignOff1.mp3', 'SignOff2.mp3'];
 
-const VOL = { sting: 0.9, bed: 0.16, transition: 0.5, signoff: 0.8 };
+// sting 0.75 (was 0.9): LogoSting1 is mastered to ~0dBFS — at 0.9 the
+// sting+narration stack in the 0.6–2.0s hook overlap clipped the master.
+const VOL = { sting: 0.75, bed: 0.16, transition: 0.5, signoff: 0.8 };
 const BED_FADE = 0.7; // s — fade in/out at every bed's window edges
 
 // Scene timeline → list of audio elements {file, delay, vol, loop?, trim?, fade?}.

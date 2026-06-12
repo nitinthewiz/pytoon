@@ -158,7 +158,12 @@ Fallback (no captions.json): proportional word-count allocation.
 
 ## Caption alignment edge cases (`build_background.js → buildCaptionsFromKokoroWithText`)
 
-Kokoro expands numbers into multiple tokens. The function uses greedy lookahead: consume tokens until the next original word is recognized, accumulating the time span. **Edge case:** consecutive digit words (e.g., "13th, 2026") — if the lookahead target has fewer than 2 alphabetic characters, the greedy loop is skipped to prevent consuming all remaining tokens.
+Kokoro expands numbers into multiple tokens ("2026" → "twenty twenty-six") and voices **no token at all** for pure-punctuation words (the spunky scripts' standalone "-" aside markers). Mapping rules (one caption per original word, always):
+- **Pure-punctuation words** ("-", "—", "..."): consume no token — zero-width caption (Unicode letters count as voiced, so Hindi words never hit this branch).
+- **Every other word**: if the *immediate* next word has ≥2 alphabetic chars, scan a **bounded window (15 tokens)** for its first token and span everything before it — this covers number expansions and re-syncs any drift. No match in the window → consume exactly **one** token. The bound is load-bearing: an unbounded scan once swallowed every remaining token after "18" (next word's tokens were already behind the cursor after a "-" drift), freezing captions and collapsing all later scenes (2026-06-11 us-AM edition). Anchor is the immediate next word only — scanning past digit neighbours would let "7," swallow "2026"'s expansion.
+- **Tokens exhausted early**: remaining words are spread across the leftover audio span.
+
+`computeSegmentDurations` additionally redistributes + monotonic-clamps degenerate segment starts (safety net), so slide timing can never collapse into minimum-length slides + a frozen closing.
 
 ---
 
