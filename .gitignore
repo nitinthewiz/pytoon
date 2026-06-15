@@ -18,6 +18,10 @@ speech.txt
 # only committed video — it's the fallback)
 animation.mp4
 avatar.mp4
+# cover/thumb are composited on the runner (cover/make_cover.py) and uploaded to
+# MinIO — never committed. (The fonts/poses under cover/assets/ ARE committed.)
+cover.png
+thumb.png
 captions_overlay.mp4
 captions.json
 emotions.json

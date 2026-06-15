@@ -151,6 +151,50 @@ jobs:
           Write-Host "Video uploaded to MinIO as $($m.video_key)"
         } else { Write-Host "No video_key in manifest - skipping MinIO upload" }
 
+    # ---- Cover / thumbnail (Option A: generate here, upload to MinIO) ----
+    # n8n's host can't reach the standalone VPS thumbnail service (port 8790 is
+    # egress-restricted), so we composite the day's cover + YT thumb on the runner
+    # — which already has the manifest + a built video — and upload them to MinIO
+    # next to the video. n8n's "4. Publish" then S3-downloads + posts the cover.
+    # Cover-key convention (mirrored in n8n WF4): videos/NAME.mp4 ->
+    # covers/NAME.png and thumbs/NAME.png. The whole branch is best-effort
+    # (continue-on-error) so a cover hiccup never fails an otherwise-good render.
+    - name: Install cover deps (Pillow + requests)
+      if: ${{ success() && inputs.manifest_b64 != '' }}
+      continue-on-error: true
+      run: |
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" -m pip install --quiet pillow requests
+
+    - name: Generate cover + thumbnail (PIL)
+      if: ${{ success() && inputs.manifest_b64 != '' }}
+      continue-on-error: true
+      env:
+        # Optional — if this secret isn't set, make_cover.py derives the hook
+        # locally from the take instead of calling DeepInfra. Never fails the build.
+        DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      run: |
+        & "E:\actions-runner\_work\_tool\Python\3.13.5\x64\python.exe" cover/make_cover.py
+
+    - name: Upload cover + thumbnail to MinIO for publishing
+      if: ${{ success() && inputs.manifest_b64 != '' }}
+      continue-on-error: true
+      shell: pwsh
+      run: |
+        $m = Get-Content 'manifest.json' -Raw | ConvertFrom-Json
+        if ($m.video_key) {
+          # videos/NAME.mp4 -> covers/NAME.png  and  thumbs/NAME.png
+          $coverKey = ($m.video_key -replace '^videos/','covers/') -replace '\.mp4$','.png'
+          $thumbKey = ($m.video_key -replace '^videos/','thumbs/') -replace '\.mp4$','.png'
+          if (Test-Path 'cover.png') {
+            & "${{ secrets.MINIO_MC_PATH }}\mc" cp cover.png "myminio/${{ secrets.MINIO_BUCKET_NAME }}/$coverKey" --insecure
+            Write-Host "Cover uploaded to MinIO as $coverKey"
+          } else { Write-Host "cover.png not found - skipping cover upload" }
+          if (Test-Path 'thumb.png') {
+            & "${{ secrets.MINIO_MC_PATH }}\mc" cp thumb.png "myminio/${{ secrets.MINIO_BUCKET_NAME }}/$thumbKey" --insecure
+            Write-Host "Thumb uploaded to MinIO as $thumbKey"
+          } else { Write-Host "thumb.png not found - skipping thumb upload" }
+        } else { Write-Host "No video_key in manifest - skipping cover/thumb upload" }
+
     - name: Notify n8n render-complete webhook
       if: ${{ success() && inputs.manifest_b64 != '' }}
       shell: pwsh
