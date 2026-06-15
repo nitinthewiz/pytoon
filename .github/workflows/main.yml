@@ -124,12 +124,17 @@ jobs:
         name: background_video.mp4
         path: background_video.mp4
 
-    # Legacy direct Telegram post — OLD workflow runs only (no manifest_b64).
-    # It sends the video without width/height, so Telegram shows it squished.
-    # v2 manifest runs skip it: n8n "4. Publish" posts the video properly via
-    # the callback below, and posting here too produced a squished duplicate.
+    # Direct-from-runner Telegram post (multipart sendVideo of the actual file).
+    # DIAGNOSTIC (2026-06-15): re-enabled for v2 runs TOO, to A/B against the n8n
+    # "4. Publish" post. The file is provably 1080x1920 SAR 1:1 + faststart, yet the
+    # n8n Telegram node's re-upload shows squished on mobile; this direct multipart
+    # upload lets Telegram auto-detect the aspect from the file. This post lands
+    # FIRST (right after render) and has NO caption; the n8n post lands ~30-60s later
+    # WITH the title caption. Once we know which one displays correctly, gate the
+    # other off (and mirror the choice for the cover).
     - name: Upload video file to telegram using xireiki/channel-post@v2
-      if: ${{ success() && inputs.manifest_b64 == '' }}
+      if: ${{ success() }}
+      continue-on-error: true
       uses: xireiki/channel-post@v2
       with:
         bot_token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
