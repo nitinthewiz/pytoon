@@ -1,7 +1,8 @@
 import React from 'react';
 import { AbsoluteFill, Sequence } from 'remotion';
 import { NH } from '../newshound';
-import { StingerWipeOverlay, SceneFlashOverlay } from './StingerWipe';
+import { StingerWipeOverlay, SectionStingerOverlay, SceneFlashOverlay } from './StingerWipe';
+import { sectionOf } from './Sections';
 import { type NewsItem, type SceneTimeline } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -97,12 +98,19 @@ export const ShowLayout: React.FC<{
         <Overlay boundary={closingStartFrame} len={flashLen}><SceneFlashOverlay /></Overlay>
       )}
       {/* story->story branded wipes (skip the first story — its entry is the
-          headlines->stories scene cut above) */}
-      {storyStartFrames.slice(1).map((boundary, i) => (
-        <Overlay key={`wipe-${i}`} boundary={boundary} len={wipeFrames}>
-          <StingerWipeOverlay />
-        </Overlay>
-      ))}
+          headlines->stories scene cut above). A cut that crosses a SECTION
+          boundary (top->sports->fun) gets the distinct BLUE section stinger
+          instead of the yellow story wipe; it's a touch longer so it reads as a
+          bigger beat and hands off to the blue SectionCard on the next story. */}
+      {storyStartFrames.slice(1).map((boundary, idx) => {
+        const i = idx + 1; // boundary sits between stories[i-1] and stories[i]
+        const sectionChange = stories[i] && stories[i - 1] && sectionOf(stories[i]) !== sectionOf(stories[i - 1]);
+        return (
+          <Overlay key={`wipe-${idx}`} boundary={boundary} len={sectionChange ? Math.max(wipeFrames, flashLen) : wipeFrames}>
+            {sectionChange ? <SectionStingerOverlay /> : <StingerWipeOverlay />}
+          </Overlay>
+        );
+      })}
     </AbsoluteFill>
   );
 };

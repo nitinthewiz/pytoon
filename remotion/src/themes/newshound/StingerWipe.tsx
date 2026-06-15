@@ -116,14 +116,23 @@ export const stingerWipe = (
 // above, so the look is unchanged.
 // ---------------------------------------------------------------------------
 
+// Tone presets: story wipes are Newshound-Yellow; SECTION changes (top->sports->
+// fun) are a distinct BLUE so a new section reads as a bigger beat than a story flip.
+const TONE = {
+  yellow: { from: NH.yellow, to: '#F2A816', accent: NH.orange },
+  blue: { from: NH.cyan, to: '#0E76B8', accent: '#08324C' },
+} as const;
+type Tone = keyof typeof TONE;
+
 // Shared band visual — `progress` 0..1 sweeps it left->right; covers the whole
 // 1080px frame around progress 0.5 (where the hard cut sits beneath it).
-const StingerBand: React.FC<{ progress: number; label?: string }> = ({ progress, label }) => {
+const StingerBand: React.FC<{ progress: number; label?: string; tone?: Tone }> = ({ progress, label, tone = 'yellow' }) => {
   const x = interpolate(progress, [0, 1], [SWEEP[0], SWEEP[1]], {
     easing: Easing.inOut(Easing.cubic),
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
+  const t = TONE[tone];
   return (
     <AbsoluteFill style={{ overflow: 'hidden', pointerEvents: 'none', zIndex: 60 }}>
       <div
@@ -134,7 +143,7 @@ const StingerBand: React.FC<{ progress: number; label?: string }> = ({ progress,
           left: '-30%',
           width: '160%',
           transform: `translateX(${x}%) skewX(-12deg)`,
-          background: `linear-gradient(180deg, ${NH.yellow} 0%, #F2A816 100%)`,
+          background: `linear-gradient(180deg, ${t.from} 0%, ${t.to} 100%)`,
           borderLeft: `12px solid ${NH.ink}`,
           borderRight: `12px solid ${NH.ink}`,
           boxShadow: '0 0 90px rgba(0,0,0,0.5)',
@@ -144,8 +153,8 @@ const StingerBand: React.FC<{ progress: number; label?: string }> = ({ progress,
         }}
       >
         <div style={{ transform: 'skewX(12deg)', display: 'flex', alignItems: 'center', gap: 36, whiteSpace: 'nowrap' }}>
-          <Img src={staticFile('james.png')} style={{ height: 260, transform: 'rotate(-6deg)', filter: `drop-shadow(0 10px 0 ${NH.orange})` }} />
-          <span style={{ fontFamily: ANTON, fontSize: 150, color: NH.ink, letterSpacing: 8, textShadow: `0 6px 0 ${NH.orange}` }}>
+          <Img src={staticFile('james.png')} style={{ height: 260, transform: 'rotate(-6deg)', filter: `drop-shadow(0 10px 0 ${t.accent})` }} />
+          <span style={{ fontFamily: ANTON, fontSize: 150, color: tone === 'blue' ? NH.white : NH.ink, letterSpacing: 8, textShadow: `0 6px 0 ${t.accent}` }}>
             {label ?? BRAND.name}
           </span>
         </div>
@@ -161,6 +170,17 @@ export const StingerWipeOverlay: React.FC<{ label?: string }> = ({ label }) => {
   const { durationInFrames } = useVideoConfig();
   const progress = durationInFrames > 1 ? frame / (durationInFrames - 1) : 0;
   return <StingerBand progress={progress} label={label} />;
+};
+
+// SECTION-change stinger (top->sports->fun): the same band motion but BLUE, so a
+// section change is unmistakably a different beat than the yellow story wipes. It
+// hands off to the (also blue) SectionCard, which carries the section name — so
+// the band keeps the NEWSHOUND wordmark to avoid double-labelling.
+export const SectionStingerOverlay: React.FC<{ label?: string }> = ({ label }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const progress = durationInFrames > 1 ? frame / (durationInFrames - 1) : 0;
+  return <StingerBand progress={progress} label={label} tone="blue" />;
 };
 
 // Scene-boundary overlay (Opening->Headlines, Headlines->Stories, Stories->Closing).

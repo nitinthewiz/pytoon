@@ -88,7 +88,8 @@ export const SectionCard: React.FC<{ section: string }> = ({ section }) => {
           left: '-30%',
           width: '160%',
           transform: `translateX(${x}%) skewX(-12deg)`,
-          background: `linear-gradient(180deg, ${NH.yellow} 0%, #F2A816 100%)`,
+          // BLUE section divider (distinct from the yellow story stingers).
+          background: `linear-gradient(180deg, ${NH.cyan} 0%, #0E76B8 100%)`,
           borderLeft: `12px solid ${NH.ink}`,
           borderRight: `12px solid ${NH.ink}`,
           boxShadow: '0 0 90px rgba(0,0,0,0.5)',
@@ -109,13 +110,13 @@ export const SectionCard: React.FC<{ section: string }> = ({ section }) => {
         >
           <Img
             src={staticFile('james.png')}
-            style={{ height: 220, transform: 'rotate(-6deg)', filter: `drop-shadow(0 10px 0 ${NH.orange})` }}
+            style={{ height: 220, transform: 'rotate(-6deg)', filter: 'drop-shadow(0 10px 0 #08324C)' }}
           />
           <div>
-            <div style={{ fontFamily: INTER, fontWeight: 900, fontSize: 34, color: NH.ink, letterSpacing: 10, opacity: 0.75 }}>
+            <div style={{ fontFamily: INTER, fontWeight: 900, fontSize: 34, color: NH.white, letterSpacing: 10, opacity: 0.85 }}>
               NEXT UP
             </div>
-            <div style={{ fontFamily: ANTON, fontSize: labelSize, lineHeight: 1, color: NH.ink, letterSpacing: 5, textShadow: `0 6px 0 ${NH.orange}` }}>
+            <div style={{ fontFamily: ANTON, fontSize: labelSize, lineHeight: 1, color: NH.white, letterSpacing: 5, textShadow: '0 6px 0 #08324C' }}>
               {label}
             </div>
           </div>
