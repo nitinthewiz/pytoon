@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic 10-story 5+3+2 fixture (5 top + 3 sports + 2 entertainment) for NewshoundShowFB stills. imagePath reuses gitignored remotion/public/images/0-4.jpg from any prior local run. Key frames @30fps: rundown 170, sports divider 700, sports badge 745, entertainment divider 1015.",
+  "_comment": "Synthetic 10-story 5+3+2 fixture (5 top + 3 sports + 2 entertainment) for NewshoundShowFB stills. imagePath reuses gitignored remotion/public/images/0-4.jpg from any prior local run. Carries an absolute-frame `timeline` so it exercises the live (overlay-wipe) layout, not the legacy fallback. Story scenes are contiguous at storyStartFrames; transitions are overlays on the cuts. Key frames @30fps: rundown 120, story->story wipe lands ON each storyStartFrame (e.g. 295/415/535), sports divider ~790 (idx5 @775), sports badge mid-story ~960, entertainment divider ~1150 (idx8 @1135), sign-off (closing) >=1375.",
   "items": [
     {
       "imagePath": null,
@@ -91,5 +91,13 @@
   ],
   "captions": [],
   "captionTop": 1580,
-  "closingFrames": 120
+  "closingFrames": 120,
+  "timeline": {
+    "openingFrames": 60,
+    "headlinesStartFrame": 60,
+    "storyStartFrames": [175, 295, 415, 535, 655, 775, 895, 1015, 1135, 1255],
+    "closingStartFrame": 1375,
+    "showEndFrame": 1513,
+    "wipeFrames": 15
+  }
 }
