@@ -24,7 +24,14 @@
     { "type": "stories" },
     { "type": "closing", "durationSec": 4 }
   ],
-  "hookOverlapSec": 1.4,
+  "hookOverlapSec": 0,
+  "audio": {
+    "openingSting": 0.75,
+    "beds": 0.16,
+    "storyStingers": 0.05,
+    "closingBed": 0.05,
+    "signOff": 0.05
+  },
   "avatar": {
     "widthPct": 0.75,
     "cropHeight": 704,

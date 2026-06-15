@@ -30,7 +30,17 @@ export type Production = {
   // Retention hook: how early (sec) the cold-open narration line starts BEFORE the
   // opening scene hands off. The headlines scene shrinks by the same amount so
   // story-1's narration still lands exactly on the Stories scene start.
+  // 0 = let the opening sting finish, then narrate (current setting).
   hookOverlapSec?: number;
+  // Music mix levels, read by compose.js (not Remotion). Tunable in JSON only;
+  // compose.js keeps identical code defaults for when the block is absent.
+  audio?: {
+    openingSting?: number;
+    beds?: number;
+    storyStingers?: number;
+    closingBed?: number;
+    signOff?: number;
+  };
   avatar: { widthPct: number; cropHeight: number; presentScenes: SceneType[] };
   sceneTransition: { durationFrames: number };
 };

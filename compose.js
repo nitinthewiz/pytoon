@@ -25,6 +25,7 @@ const AVATAR = path.join(__dirname, 'avatar.mp4');
 const CAPTIONS = path.join(__dirname, 'captions_overlay.mp4');
 const AUDIO = path.join(__dirname, 'speech.mp3');
 const COMPOSITE_JSON = path.join(__dirname, 'composite.json');
+const PRODUCTION_JSON = path.join(__dirname, 'productions', 'daily-news', 'production.json');
 const OUTPUT = path.join(__dirname, 'animation.mp4');
 const AUDIO_DIR = path.join(__dirname, 'assets', 'audio');
 
@@ -58,9 +59,24 @@ const EMOTION_TO_BED = { angry: 'angry', sad: 'sad', happy: 'happy', explain: 'e
 const TRANSITION_STINGS = ['transition1.mp3', 'transition2.mp3'];
 const SIGNOFFS = ['SignOff1.mp3', 'SignOff2.mp3'];
 
-// sting 0.75 (was 0.9): LogoSting1 is mastered to ~0dBFS — at 0.9 the
-// sting+narration stack in the 0.6–2.0s hook overlap clipped the master.
-const VOL = { sting: 0.75, bed: 0.16, transition: 0.5, signoff: 0.8 };
+// Mix levels live in productions/daily-news/production.json → "audio" (tune by
+// editing JSON, no code). The defaults below mirror that file exactly and only
+// apply when the block (or the file) is missing.
+//   openingSting  0.75 — LogoSting1 is mastered to ~0dBFS; higher clipped the master
+//   beds          0.16 — headlines rundown bed + per-story emotion beds
+//   storyStingers 0.05 — transition stingers at story cuts (user: 5%, not distracting)
+//   closingBed    0.05 — outro bed under the closing (user: 5%, don't fight the sign-off)
+//   signOff       0.05 — sign-off sting capping the show (user: 5%)
+const VOL_DEFAULTS = { openingSting: 0.75, beds: 0.16, storyStingers: 0.05, closingBed: 0.05, signOff: 0.05 };
+function loadAudioLevels() {
+  try {
+    const prod = JSON.parse(fs.readFileSync(PRODUCTION_JSON, 'utf8'));
+    return { ...VOL_DEFAULTS, ...(prod.audio || {}) };
+  } catch {
+    return { ...VOL_DEFAULTS };
+  }
+}
+const VOL = loadAudioLevels();
 const BED_FADE = 0.7; // s — fade in/out at every bed's window edges
 
 // Scene timeline → list of audio elements {file, delay, vol, loop?, trim?, fade?}.
@@ -75,23 +91,24 @@ function buildSceneAudioElements(cfg) {
     const len = Math.max(0.1, (sc.end || 0) - (sc.start || 0));
     if (sc.type === 'opening') {
       // Brand sting — ~2s, sized to the opening; plays out naturally at full tilt.
-      els.push({ file: OPENING_STING, delay: sc.start, vol: VOL.sting });
+      // With hookOverlapSec=0 the narration starts right as it ends (clean handoff).
+      els.push({ file: OPENING_STING, delay: sc.start, vol: VOL.openingSting });
     } else if (sc.type === 'headlines') {
-      els.push({ file: pick(BED_VARIANTS.headlines, si), loop: true, trim: len, fade: BED_FADE, delay: sc.start, vol: VOL.bed });
+      els.push({ file: pick(BED_VARIANTS.headlines, si), loop: true, trim: len, fade: BED_FADE, delay: sc.start, vol: VOL.beds });
     } else if (sc.type === 'story') {
       const bedKey = EMOTION_TO_BED[String(sc.emotion || '').toLowerCase()] || 'explain';
-      els.push({ file: pick(BED_VARIANTS[bedKey], si), loop: true, trim: len, fade: BED_FADE, delay: sc.start, vol: VOL.bed });
+      els.push({ file: pick(BED_VARIANTS[bedKey], si), loop: true, trim: len, fade: BED_FADE, delay: sc.start, vol: VOL.beds });
     } else if (sc.type === 'closing') {
-      els.push({ file: CLOSING_BED, loop: true, trim: len, fade: BED_FADE, delay: sc.start, vol: VOL.bed });
+      els.push({ file: CLOSING_BED, loop: true, trim: len, fade: BED_FADE, delay: sc.start, vol: VOL.closingBed });
       // Sign-off sting (~2s) lands so it ENDS just before the video does.
       const so = pick(SIGNOFFS, si);
       const soDur = probeDuration(path.join(AUDIO_DIR, so)) || 2.0;
-      els.push({ file: so, delay: Math.max(sc.start, sc.end - soDur - 0.1), vol: VOL.signoff });
+      els.push({ file: so, delay: Math.max(sc.start, sc.end - soDur - 0.1), vol: VOL.signOff });
     }
   });
 
   (cfg.storyBoundaries || []).forEach((t, bi) => {
-    els.push({ file: pick(TRANSITION_STINGS, bi), delay: Math.max(0, t), vol: VOL.transition });
+    els.push({ file: pick(TRANSITION_STINGS, bi), delay: Math.max(0, t), vol: VOL.storyStingers });
   });
 
   return els.filter((el) => {
@@ -198,7 +215,7 @@ function main() {
     }
     bedLabel = '[bed]';
     console.log(`Per-scene audio: ${musicEls.length} elements (seed ${cfg.audioSeed || 0}) — ` +
-      musicEls.map((e) => `${e.file}@${(e.delay || 0).toFixed(1)}s`).join(', '));
+      musicEls.map((e) => `${e.file}@${(e.delay || 0).toFixed(1)}s x${e.vol}`).join(', '));
   } else if (hasMusic) {
     inputs.push('-stream_loop', '-1', '-i', musicFile);
     filters.push(`[${i}:a]volume=${musicVol}[bed]`);
