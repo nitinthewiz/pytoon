@@ -16,57 +16,190 @@ const COMPOSITE_JSON = path.join(__dirname, 'composite.json');
 
 const FPS = 30;
 const TRANSITION_FRAMES = 15;
+// Overlay-wipe length at STORY->STORY cuts (frames). The branded StingerWipe is
+// drawn ON TOP of a hard cut, centred on the boundary -- it consumes NO timeline
+// frames (that was the old TransitionSeries.Transition bug). Visuals unchanged
+// (~15f @30fps), see remotion/src/themes/newshound/StingerWipe.tsx.
+const WIPE_FRAMES = 15;
+// Build-time sync tolerance (frames). Rounding to whole frames at scene/word
+// boundaries can disagree by ~1f between the JS and TS sides; +-2 absorbs that
+// without ever masking a real drift (the old bug was 4+ frames and grew).
+const SYNC_TOL_FRAMES = 2;
 
-// Where the stories scene begins on the Production timeline (seconds). The
-// narration audio, pytoon avatar and captions are all offset to this point so
-// they line up with the stories scene (after Opening + Headlines play).
 function loadProduction() {
   return JSON.parse(fs.readFileSync(PRODUCTION_JSON, 'utf8'));
 }
 
-// When the narration (audio + avatar + captions) begins on the show timeline.
-// - newshound: narration covers the Headlines scene (intro teases the rundown)
-//   and, as a retention hook, starts hookOverlapSec BEFORE the opening hands off
-//   (the cold-open line plays over the splash).
-// - classic: narration starts at the Stories scene (after Opening + Headlines).
-function computeNarrationStartSec(prod, introFrames) {
+// --- Absolute-frame timeline (THE single source of truth) -------------------
+//
+// One timeline, anchored to the Kokoro caption word-timestamps. Every scene is
+// a plain, contiguous, NON-overlapping window [startFrame, endFrame) on the
+// final video timeline; the same frames drive BOTH the Remotion composition
+// (passed in render-props.timeline) and composite.json.scenes (compose.js's
+// per-scene audio). No transition-frame bookkeeping, no second word-splitter --
+// transitions are painted as OVERLAYS on top of the hard cuts.
+//
+//   narrationStartSec : where the audio/avatar/captions begin (UNCHANGED -- same
+//                       HOOK_OVERLAP behaviour as before).
+//   opening  [0, openingFrames)                    -- cold-open splash (scene cut)
+//   headlines[openingFrames, story1Start)          -- THE RUNDOWN, under the intro narration
+//   story k  [narrStart + capStart(k), next)       -- anchored to its first spoken word
+//   closing  [narrStart + capStart(close), showEnd)-- absorbs all residual slack
+//
+// segStartSecs are the per-segment first-word start times pulled from the SAME
+// captions array the on-screen captions use (reused from computeSegmentDurations
+// -- that lookup is correct; the old drift lived only in the transition math).
+function computeTimeline(prod, opts) {
   const pfps = prod.canvas.fps;
   const theme = prod.theme || 'classic';
   const isNH = theme.startsWith('newshound');
   const dur = (t) => (prod.scenes.find((s) => s.type === t) || {}).durationSec || 0;
-  const stf = prod.sceneTransition.durationFrames; // scene-to-scene transition (overlap)
-  const openingF = Math.round(dur('opening') * pfps);
+  const openingFrames = Math.round(dur('opening') * pfps);
   const hookF = isNH ? Math.round((prod.hookOverlapSec || 0) * pfps) : 0;
+  // Closing scene minimum length (frames): the [CLOSE] narration drives it when
+  // present, else the configured closing default. The Closing scene is then
+  // stretched so it can never under-run the audio (see showEndFrames below).
+  const closingTailFrames = opts.closingFrames
+    ?? Math.round(dur('closing') * pfps);
+  // Small fixed HOLD after the last spoken word so the sign-off card lingers a
+  // beat instead of hard-cutting to black (~0.6s). The closing never ends
+  // before narration end + this hold -> the video can't under-run the audio.
+  const SHOW_TAIL_FRAMES = Math.round(0.6 * pfps);
 
-  // The teaser item carries the intro narration length plus a slide-transition
-  // bonus (TRANSITION_FRAMES) baked in by computeSegmentDurations.
-  const introNarrFrames = Math.max(0, (introFrames || 0) - TRANSITION_FRAMES);
+  const {
+    hasIntro, introNarrFrames, segStartSecs, totalDuration,
+    storyCount, closeStartSec,
+  } = opts;
 
-  // Headlines scene length. MUST mirror headlinesFrames() in
-  // remotion/src/themes/newshound/Show.tsx:
-  //   headlines = introNarration + 2*stf - hook
-  // so that narrationStart = opening - hook AND story-1's narration lands exactly
-  // on the Stories scene start (opening + headlines - 2*stf).
-  const headFrames = isNH && (introFrames || 0) > 0
-    ? Math.max(1, introNarrFrames + 2 * stf - hookF)
-    : (introFrames || 0);
-  // Where the Stories scene actually begins on the show timeline (2 scene
-  // transitions before it overlap, so subtract 2*stf).
-  const storiesSceneStart = openingF + headFrames - 2 * stf;
+  // narrationStart: newshound starts the audio so story-1's narration lands on
+  // the Stories-scene start, entering the opening splash by the hook overlap;
+  // classic just starts at the Stories scene. introNarrFrames is the intro's
+  // EXACT caption length (story-1 first-word sec * fps) -- no TRANSITION_FRAMES
+  // fudge anymore, because nothing overlaps.
+  const storiesSceneStartF = openingFrames + Math.max(0, isNH ? introNarrFrames - hookF : introNarrFrames);
+  const narrStartF = isNH
+    ? Math.max(0, storiesSceneStartF - introNarrFrames)
+    : storiesSceneStartF;
+  const narrationStartSec = narrStartF / pfps;
 
-  // newshound* themes: narration covers Headlines (intro) → Stories. Offset it so
-  // the FIRST story's narration lands exactly on the Stories scene start; the intro
-  // then plays back over the Headlines scene (entering the opening splash by the
-  // hook overlap). This keeps every story slide in lockstep with James — no image
-  // rolling in before he's done talking.
-  // classic: narration just starts at the Stories scene.
-  const startFrame = isNH ? storiesSceneStart - introNarrFrames : storiesSceneStart;
+  // Absolute start frame of each segment = narrationStart + its first-word sec.
+  // segStartSecs covers [intro?, story1..N, close?]; index past the intro.
+  const storyBase = hasIntro ? 1 : 0;
+  const absFrame = (sec) => Math.round((narrationStartSec + sec) * pfps);
+  const storyStartFrames = [];
+  for (let i = 0; i < storyCount; i++) {
+    storyStartFrames.push(absFrame(segStartSecs[storyBase + i] ?? 0));
+  }
+  const closingStartF = closeStartSec != null ? absFrame(closeStartSec) : null;
+
+  // Show end: the Closing absorbs all residual slack. Its end is the later of
+  // (its own start + its narration length) and (narration end), plus a small
+  // fixed hold -- so the sign-off card is always on screen for its full line and
+  // the video can NEVER under-run the audio. With no [CLOSE] segment, the last
+  // story simply runs to that same end.
+  const narrEndF = Math.round((narrationStartSec + totalDuration) * pfps);
+  const lastSceneStartF = closingStartF != null
+    ? closingStartF
+    : (storyStartFrames[storyCount - 1] ?? storiesSceneStartF);
+  const showEndFrames = Math.max(lastSceneStartF + closingTailFrames, narrEndF) + SHOW_TAIL_FRAMES;
+
   return {
-    fps: pfps,
-    narrationStartSec: Math.max(0, startFrame) / pfps,
-    // frame-level pieces, reused by the scene-timeline emission below
-    openingF, headFrames, storiesSceneStartF: storiesSceneStart, stf, isNH,
+    fps: pfps, isNH, narrationStartSec,
+    openingFrames,
+    headlinesStartF: openingFrames,           // hard cut right after the opening
+    storiesSceneStartF,
+    storyStartFrames,                         // absolute start of each story scene
+    closingStartF,                            // null when no [CLOSE] segment
+    showEndFrames,
+    introNarrFrames, hookF, closingTailFrames, narrEndF,
   };
+}
+
+// Build-time SYNC ASSERTION. Proves the ONE timeline is contiguous and that
+// every scene lands on its audio anchor, then prints a report so each render
+// proves sync in the log instead of us eyeballing it. Throws (fails the build)
+// on any break beyond +-SYNC_TOL_FRAMES -- we never ship drift again.
+function assertTimelineSync(tl, ctx) {
+  const FPSr = tl.fps;
+  const errs = [];
+  // Ordered scene list with the audio start each scene is SUPPOSED to hit.
+  const rows = [];
+  const push = (type, startF, audioSec) => rows.push({ type, startF, audioSec });
+  push('opening', 0, null);
+  push('headlines', tl.headlinesStartF, null);
+  tl.storyStartFrames.forEach((f, i) => push(`story_${i + 1}`, f, ctx.storyAudioSecs[i]));
+  if (tl.closingStartF != null) push('closing', tl.closingStartF, ctx.closeAudioSec);
+  // Synthetic end row so the contiguity check covers the final scene too.
+  const endRow = { type: '(end)', startF: tl.showEndFrames, audioSec: null };
+
+  // 1) contiguous + non-overlapping: every scene starts where the previous ended.
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].startF < rows[i - 1].startF) {
+      errs.push(`scene "${rows[i].type}" starts (${rows[i].startF}f) before previous "${rows[i - 1].type}" (${rows[i - 1].startF}f)`);
+    }
+  }
+  if (endRow.startF < rows[rows.length - 1].startF) {
+    errs.push(`show end (${endRow.startF}f) before last scene "${rows[rows.length - 1].type}" (${rows[rows.length - 1].startF}f)`);
+  }
+
+  // 2) each story/closing scene start == narrationStart + (first-word sec)*fps.
+  const within = (a, b) => Math.abs(a - b) <= SYNC_TOL_FRAMES;
+  rows.forEach((r) => {
+    if (r.audioSec == null) return;
+    const expect = Math.round((tl.narrationStartSec + r.audioSec) * FPSr);
+    if (!within(r.startF, expect)) {
+      errs.push(`scene "${r.type}" start ${r.startF}f != audio-anchored ${expect}f (delta ${r.startF - expect}f)`);
+    }
+  });
+
+  // 3) Stories block first frame == narrationStart + intro-narration frames
+  //    == story-1 audio start.
+  const story1F = tl.storyStartFrames[0];
+  if (story1F != null) {
+    const introImplied = Math.round(tl.narrationStartSec * FPSr) + tl.introNarrFrames;
+    if (!within(story1F, introImplied)) {
+      errs.push(`story_1 start ${story1F}f != narrationStart+introNarration ${introImplied}f (delta ${story1F - introImplied}f)`);
+    }
+    if (!within(tl.storiesSceneStartF, story1F)) {
+      errs.push(`storiesSceneStart ${tl.storiesSceneStartF}f != story_1 start ${story1F}f (delta ${tl.storiesSceneStartF - story1F}f)`);
+    }
+  }
+
+  // 4) total duration == Closing end AND >= narrationStart + total narration.
+  if (tl.showEndFrames < tl.narrEndF) {
+    errs.push(`show end ${tl.showEndFrames}f < narration end ${tl.narrEndF}f -- video would under-run audio`);
+  }
+
+  // --- SYNC REPORT --------------------------------------------------------
+  const f2s = (f) => (f / FPSr).toFixed(3);
+  const allRows = [...rows, endRow];
+  const lines = allRows.map((r, i) => {
+    const next = allRows[i + 1];
+    const lenF = next ? next.startF - r.startF : 0;
+    const audioStr = r.audioSec == null ? '-' : (tl.narrationStartSec + r.audioSec).toFixed(3);
+    const expectF = r.audioSec == null ? null : Math.round((tl.narrationStartSec + r.audioSec) * FPSr);
+    const deltaF = expectF == null ? '-' : String(r.startF - expectF);
+    return [
+      r.type.padEnd(10),
+      String(r.startF).padStart(6),
+      (f2s(r.startF) + 's').padStart(9),
+      (next ? String(lenF).padStart(5) + 'f' : '    -'),
+      audioStr.padStart(8),
+      deltaF.padStart(7),
+    ].join('  ');
+  });
+  console.log('\n------------ SYNC REPORT (absolute-frame timeline) ------------');
+  console.log(['scene'.padEnd(10), 'start'.padStart(6), 'startSec'.padStart(9), ' len'.padStart(6), 'audioSt'.padStart(8), 'dVframe'.padStart(7)].join('  '));
+  lines.forEach((l) => console.log(l));
+  console.log(`narrationStart=${tl.narrationStartSec.toFixed(3)}s  narrationEnd=${f2s(tl.narrEndF)}s  showEnd=${f2s(tl.showEndFrames)}s  tol=+-${SYNC_TOL_FRAMES}f`);
+  console.log('---------------------------------------------------------------\n');
+
+  if (errs.length) {
+    console.error('SYNC ASSERTION FAILED:');
+    errs.forEach((e) => console.error('  x ' + e));
+    throw new Error(`Audio/visual timeline out of sync (${errs.length} issue(s)) -- refusing to render. See SYNC REPORT above.`);
+  }
+  console.log('SYNC OK -- scenes contiguous and anchored to the narration (+-' + SYNC_TOL_FRAMES + 'f).');
 }
 
 async function main() {
@@ -142,8 +275,13 @@ async function main() {
     ...storySegments.slice(0, count),
     ...(hasClose ? [closingSegment] : []),
   ];
-  const segmentDurations = computeSegmentDurations(captions, activeSegments, totalDuration);
-  // segmentDurations: [intro?, stories…, closing?]. Closing scene = the last entry.
+  // Per-segment first-word start seconds (the single timing source) + the
+  // contiguous per-segment frame lengths for items[].durationInFrames.
+  const segStartSecs = computeSegmentStartSecs(captions, activeSegments, totalDuration);
+  const segmentDurations = contiguousFramesFromStarts(segStartSecs, totalDuration);
+  // Closing scene tail = the [CLOSE] segment's caption length (its own narration
+  // drives it). The absolute timeline then stretches the Closing to swallow any
+  // residual slack so the video never under-runs the audio.
   const closingFrames = hasClose ? segmentDurations[segmentDurations.length - 1] : null;
 
   fs.mkdirSync(IMAGE_DIR, { recursive: true });
@@ -240,7 +378,46 @@ async function main() {
     }
   }
 
-  fs.writeFileSync(PROPS_FILE, JSON.stringify({ items, captions, captionTop, closingFrames }, null, 2));
+  // --- ONE absolute-frame timeline, anchored to the captions ----------------
+  // Built BEFORE rendering so the exact same scene frames go into BOTH the
+  // Remotion comp (render-props.timeline) and composite.json.scenes. The intro
+  // narration length (story-1's first-word sec) sets where Stories begins.
+  const storyItemsAll = items.filter((it) => !(it.imagePath === null && it.teaserImages != null));
+  const storyCount = storyItemsAll.length;
+  const storyBase = hasIntro ? 1 : 0;
+  // intro narration frames = exact caption length of the intro segment (= story-1
+  // first-word sec). 0 when there is no intro (classic [ITEM]-first scripts).
+  const introNarrFrames = hasIntro
+    ? Math.max(0, Math.round((segStartSecs[storyBase] ?? 0) * (prod.canvas.fps)))
+    : 0;
+  const closeStartSec = hasClose ? segStartSecs[segStartSecs.length - 1] : null;
+
+  const timeline = computeTimeline(prod, {
+    hasIntro, introNarrFrames, segStartSecs, totalDuration,
+    storyCount, closeStartSec, closingFrames,
+  });
+
+  // Build-time sync guard: the audio start each scene must hit (for the report).
+  const storyAudioSecs = [];
+  for (let i = 0; i < storyCount; i++) storyAudioSecs.push(segStartSecs[storyBase + i] ?? 0);
+  if (isNH) {
+    assertTimelineSync(timeline, { storyAudioSecs, closeAudioSec: closeStartSec });
+  }
+
+  // Scene frames the Remotion comp consumes (newshound themes lay plain,
+  // contiguous Sequences at these absolute frames; transitions are overlays).
+  const sceneTimeline = isNH ? {
+    openingFrames: timeline.openingFrames,
+    headlinesStartFrame: timeline.headlinesStartF,
+    storyStartFrames: timeline.storyStartFrames,
+    closingStartFrame: timeline.closingStartF, // null when no [CLOSE]
+    showEndFrame: timeline.showEndFrames,
+    wipeFrames: WIPE_FRAMES,
+  } : undefined;
+
+  fs.writeFileSync(PROPS_FILE, JSON.stringify(
+    { items, captions, captionTop, closingFrames, ...(sceneTimeline ? { timeline: sceneTimeline } : {}) },
+    null, 2));
 
   const remotionDir = path.join(__dirname, 'remotion');
   const renderFlags = '--props=../render-props.json --overwrite';
@@ -258,61 +435,47 @@ async function main() {
   );
 
   // Emit the composite timeline so compose.js can stack the layers data-driven.
-  // intro narration length (carried on the teaser item) sets where Stories begins
-  // and, for the classic theme, the narration offset.
-  const introFrames = (items[0] && items[0].imagePath === null && (items[0].teaserImages != null))
-    ? items[0].durationInFrames : 0;
-  const narration = computeNarrationStartSec(prod, introFrames);
   const composite = {
-    fps: narration.fps,
-    narrationStartSec: narration.narrationStartSec,
+    fps: timeline.fps,
+    narrationStartSec: timeline.narrationStartSec,
     narrationDurationSec: totalDuration,
     avatarKey: '0xFF00FF',
     captionsKey: '0x00FF00',
   };
 
-  // fb layout: James is a bottom-left "presenter" — crop to James, scale down,
-  // place over the image's bottom-left (compose.js applies the transform).
+  // fb layout: James is a CENTERED bottom "presenter" — crop to James, scale
+  // down, place over the image's bottom (compose.js applies the transform).
   if (theme === 'newshound-fb') {
-    // James as a CENTERED bottom presenter, ~10% bigger than the first pass.
-    // y nudged down 10px (1078->1088); still ~40px above captionTop (1580).
+    // y nudged down (1078->1088); still ~40px above captionTop (1580).
     composite.avatar = { crop: '760:704:160:0', scale: 0.64, x: 297, y: 1088 };
   }
 
-  if (narration.isNH) {
-    // --- Scene timeline → compose.js's per-scene audio engine ---------------
-    // Times in SECONDS on the FINAL video timeline. Windows include the
-    // transition overlaps at both ends (scene cuts overlap by stf frames, story
-    // slides by TRANSITION_FRAMES), so adjacent music beds naturally crossfade
-    // when each fades in/out at its window edges.
-    const { openingF, headFrames, storiesSceneStartF, stf } = narration;
-    const f2s = (f) => Number((Math.max(0, f) / narration.fps).toFixed(3));
+  if (isNH) {
+    // --- Scene windows for compose.js's per-scene audio engine --------------
+    // Times in SECONDS on the FINAL video timeline, derived from the SAME
+    // absolute scene frames as the Remotion comp — so beds line up with scenes
+    // exactly. Windows are now CONTIGUOUS (each start == previous end); the
+    // per-bed BED_FADE at the hard cut gives the crossfade dip.
+    const f2s = (f) => Number((Math.max(0, f) / timeline.fps).toFixed(3));
     const emotions = loadJson(path.join(__dirname, 'emotions.json')) || [];
-    const storyItems = items.filter((it) => !(it.imagePath === null && it.teaserImages != null));
-    const storiesLenF = Math.max(1, storyItems.reduce((s, it) => s + it.durationInFrames, 0)
-      - Math.max(0, storyItems.length - 1) * TRANSITION_FRAMES);
-    const closingLenF = closingFrames
-      ?? Math.round((((prod.scenes.find((s) => s.type === 'closing') || {}).durationSec) || 0) * narration.fps);
+    const starts = timeline.storyStartFrames;
+    const closeF = timeline.closingStartF;
+    // First frame after the last story scene (= closing start, else show end).
+    const afterStoriesF = closeF != null ? closeF : timeline.showEndFrames;
 
     const scenes = [
-      { type: 'opening', start: 0, end: f2s(openingF) },
-      { type: 'headlines', start: f2s(openingF - stf), end: f2s(openingF - stf + headFrames) },
+      { type: 'opening', start: 0, end: f2s(timeline.headlinesStartF) },
+      { type: 'headlines', start: f2s(timeline.headlinesStartF), end: f2s(starts[0] ?? afterStoriesF) },
     ];
-    const storyBoundaries = []; // cut points between consecutive story slides
-    let cursorF = storiesSceneStartF;
-    storyItems.forEach((it, i) => {
-      const last = i === storyItems.length - 1;
-      // A story is on screen for its full sequence span; the next story's
-      // sequence starts TRANSITION_FRAMES before this one's end (the slide/wipe).
-      const endF = last ? storiesSceneStartF + storiesLenF : cursorF + it.durationInFrames;
-      scenes.push({ type: 'story', start: f2s(cursorF), end: f2s(endF), emotion: emotions[i] || 'explain' });
-      if (!last) {
-        cursorF += it.durationInFrames - TRANSITION_FRAMES;
-        storyBoundaries.push(f2s(cursorF));
-      }
+    const storyBoundaries = []; // cut frames between consecutive story slides
+    starts.forEach((sf, i) => {
+      const endF = i + 1 < starts.length ? starts[i + 1] : afterStoriesF;
+      scenes.push({ type: 'story', start: f2s(sf), end: f2s(endF), emotion: emotions[i] || 'explain' });
+      if (i > 0) storyBoundaries.push(f2s(sf)); // boundary == this story's start
     });
-    const closingStartF = storiesSceneStartF + storiesLenF - stf;
-    scenes.push({ type: 'closing', start: f2s(closingStartF), end: f2s(closingStartF + closingLenF) });
+    if (closeF != null) {
+      scenes.push({ type: 'closing', start: f2s(closeF), end: f2s(timeline.showEndFrames) });
+    }
 
     composite.scenes = scenes;
     composite.storyBoundaries = storyBoundaries;
@@ -323,7 +486,7 @@ async function main() {
   }
 
   fs.writeFileSync(COMPOSITE_JSON, JSON.stringify(composite, null, 2));
-  console.log(`${bgComp} + captions created. Narration ${composite.narrationStartSec.toFixed(2)}s–${(composite.narrationStartSec + composite.narrationDurationSec).toFixed(2)}s.`);
+  console.log(`${bgComp} + captions created. Narration ${composite.narrationStartSec.toFixed(2)}s-${(composite.narrationStartSec + composite.narrationDurationSec).toFixed(2)}s, showEnd ${(timeline.showEndFrames / timeline.fps).toFixed(2)}s.`);
 }
 
 // Deterministic per-run seed for music-variant rotation: simple charcode sum of
@@ -341,27 +504,34 @@ function computeAudioSeed(speechText) {
   return sum;
 }
 
-// Derive per-slide durations from the per-original-word captions array (built by
-// buildCaptionsFromKokoroWithText, so it already handles number-expansion drift).
-// Each segment's first word maps 1:1 to a caption entry, giving an exact start
-// time — the same mapping the on-screen captions use, so slides never drift from
-// the narration. Falls back to word-count proportions when captions are empty.
-function computeSegmentDurations(captions, segments, totalDuration) {
+// Per-segment FIRST-WORD start seconds, from the per-original-word captions array
+// (built by buildCaptionsFromKokoroWithText, so it already handles number-expansion
+// drift). Each segment's first word maps 1:1 to a caption entry -> an exact start
+// time, the same mapping the on-screen captions use. This is the load-bearing,
+// correct piece; the absolute-frame timeline (computeTimeline) anchors every scene
+// to these. Falls back to word-count proportions when captions are empty.
+//
+// Returns one start-second per segment, monotonic and never null. segments are
+// [intro?, story1..N, close?]; segStartSecs[0] is ~0.
+function computeSegmentStartSecs(captions, segments, totalDuration) {
+  const wordCounts = segments.map(seg => seg.split(/\s+/).filter(Boolean).length);
+
   if (!captions || captions.length === 0) {
-    const availableFrames = Math.ceil(totalDuration * FPS) + Math.max(0, segments.length - 1) * TRANSITION_FRAMES;
-    const totalWords = segments.reduce((s, seg) => s + seg.split(/\s+/).filter(Boolean).length, 0) || 1;
-    return segments.map(seg => {
-      const wc = seg.split(/\s+/).filter(Boolean).length;
-      return Math.max(FPS, Math.round((wc / totalWords) * availableFrames));
+    // No timing: spread starts across the audio by cumulative word fraction.
+    const totalWords = wordCounts.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    return segments.map((_, i) => {
+      const startSec = (acc / totalWords) * totalDuration;
+      acc += wordCounts[i];
+      return startSec;
     });
   }
 
   // captions[i] corresponds to the i-th original (cleaned-text) word, in order.
-  const wordCounts = segments.map(seg => seg.split(/\s+/).filter(Boolean).length);
   let wordIdx = 0;
   const segStartSecs = segments.map((seg, i) => {
     // null = mapping ran out of captions (captions array shorter than the
-    // script — should not happen now that buildCaptionsFromKokoroWithText
+    // script -- should not happen now that buildCaptionsFromKokoroWithText
     // always emits one caption per word, but never trust it blindly).
     const startSec = wordIdx < captions.length ? captions[wordIdx].startMs / 1000 : null;
     wordIdx += wordCounts[i];
@@ -369,7 +539,7 @@ function computeSegmentDurations(captions, segments, totalDuration) {
   });
 
   // Safety net: spread any unmapped tail segments across the remaining audio
-  // by word count, and force starts monotonic — a degenerate caption mapping
+  // by word count, and force starts monotonic -- a degenerate caption mapping
   // must never collapse the show into minimum-length slides + a frozen closing
   // (the 2026-06-11 us-AM on-air failure).
   const firstBad = segStartSecs.indexOf(null);
@@ -381,18 +551,24 @@ function computeSegmentDurations(captions, segments, totalDuration) {
       acc += (wordCounts[i - 1] / tailWords) * Math.max(0, totalDuration - base);
       segStartSecs[i] = acc;
     }
+  } else if (firstBad === 0) {
+    segStartSecs[0] = 0;
   }
   for (let i = 1; i < segStartSecs.length; i++) {
     segStartSecs[i] = Math.max(segStartSecs[i], segStartSecs[i - 1]);
   }
+  return segStartSecs;
+}
 
+// Contiguous per-segment frame lengths (NO transition bonus -- nothing overlaps
+// anymore). Each segment runs from its caption start to the next segment's start;
+// the final segment runs to totalDuration. Used for items[].durationInFrames,
+// which only drives a scene's INTERNAL animation timing (Ken Burns, progress
+// pips) -- the scene's on-screen window is set by the absolute timeline, not this.
+function contiguousFramesFromStarts(segStartSecs, totalDuration) {
   return segStartSecs.map((startSec, i) => {
     const endSec = i + 1 < segStartSecs.length ? segStartSecs[i + 1] : totalDuration;
-    const visibleFrames = Math.round((endSec - startSec) * FPS);
-    // Add transition overlap frames to every slide except the last so the video
-    // duration stays in sync with the audio even while slides crossfade.
-    const transitionBonus = i < segments.length - 1 ? TRANSITION_FRAMES : 0;
-    return Math.max(FPS, visibleFrames + transitionBonus);
+    return Math.max(FPS, Math.round((endSec - startSec) * FPS));
   });
 }
 
@@ -546,7 +722,17 @@ async function downloadImage(url, dest) {
   fs.writeFileSync(dest, Buffer.from(buffer));
 }
 
-main().catch(err => {
-  console.error('build_background.js failed:', err.message);
-  process.exit(1);
-});
+// Expose the pure timeline helpers for unit-checks (the sync assertion is the
+// regression guard); only run the pipeline when invoked directly.
+module.exports = {
+  computeTimeline, assertTimelineSync, computeSegmentStartSecs,
+  contiguousFramesFromStarts, buildCaptionsFromKokoroWithText, loadProduction,
+  FPS, WIPE_FRAMES, SYNC_TOL_FRAMES,
+};
+
+if (require.main === module) {
+  main().catch(err => {
+    console.error('build_background.js failed:', err.message);
+    process.exit(1);
+  });
+}
