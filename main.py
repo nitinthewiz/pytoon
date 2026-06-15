@@ -50,55 +50,69 @@ def build_emotion_schedule(speech_text, captions, emotions):
     """
     Map story emotions to (start_sec, end_sec, emotion) frame schedule tuples.
 
-    Uses cumulative word counts into the Kokoro token stream (same approach as
-    computeSegmentDurations in build_background.js) to find the precise second
-    each [ITEM:N] segment starts, then assigns the LLM-chosen emotion to that
-    time range. The intro always gets 'explain'.
+    Each story segment is keyed by its [ITEM:N] number, so emotions[N-1] always
+    lands on the segment the writer marked [ITEM:N] — even if the script reordered
+    the stories. (Positional mapping silently mismatched emotions when the writer
+    led with a later item.) Segment start seconds come from cumulative word counts
+    into the Kokoro token stream. The intro gets a neutral 'explain'; the [CLOSE]
+    sign-off gets a friendly 'happy' wave-off.
     """
-    segments = re.split(r'\[ITEM(?::\d+)?\]|\[CLOSE\]', speech_text)
-    segments = [s.strip() for s in segments if s.strip()]
-    if not segments:
+    VALID = {'explain', 'happy', 'rhetorical', 'sad', 'angry', 'confused'}
+    # Split but KEEP the [ITEM:N] / [CLOSE] markers so we know each segment's identity.
+    parts = re.split(r'(\[ITEM(?::\d+)?\]|\[CLOSE\])', speech_text)
+    # Walk parts into (marker, text) segments; leading text before any marker = intro.
+    segs = []  # list of dicts: {kind:'intro'|'item'|'close', num:int|None, text:str}
+    pending_marker = None
+    for chunk in parts:
+        mk = re.match(r'\[ITEM(?::(\d+))?\]', chunk)
+        if mk:
+            pending_marker = ('item', int(mk.group(1)) if mk.group(1) else None)
+            continue
+        if chunk.strip() == '[CLOSE]':
+            pending_marker = ('close', None)
+            continue
+        text = chunk.strip()
+        if not text:
+            continue
+        if pending_marker is None:
+            segs.append({'kind': 'intro', 'num': None, 'text': text})
+        else:
+            segs.append({'kind': pending_marker[0], 'num': pending_marker[1], 'text': text})
+            pending_marker = None
+    if not segs:
         return []
 
-    has_intro = not speech_text.strip().startswith('[ITEM')
-    has_close = '[CLOSE]' in speech_text
-
-    # Filter to word tokens only (Kokoro emits punctuation as separate tokens)
     word_toks = [t for t in captions if re.search(r'\w', t['word'])]
     if not word_toks:
         return []
-
     total_duration = word_toks[-1]['end_time']
 
-    # Find the start time of each segment using cumulative word count
+    # Start second of each segment via cumulative word count into the token stream.
     word_idx = 0
-    seg_start_times = []
-    for seg in segments:
+    for s in segs:
         idx = min(word_idx, len(word_toks) - 1)
-        seg_start_times.append(word_toks[idx]['start_time'])
-        word_idx += len(seg.split())
+        s['start'] = word_toks[idx]['start_time']
+        word_idx += len(s['text'].split())
+    for i, s in enumerate(segs):
+        s['end'] = segs[i + 1]['start'] if i + 1 < len(segs) else total_duration
 
+    # Assign each item its emotions[N-1] (1-based marker). Fall back to positional
+    # order only for unnumbered [ITEM] markers (legacy 5-story scripts).
     schedule = []
-    story_offset = 1 if has_intro else 0
-
-    # Intro segment → always 'explain'
-    if has_intro:
-        intro_end = seg_start_times[1] if len(seg_start_times) > 1 else total_duration
-        schedule.append((seg_start_times[0], intro_end, 'explain'))
-
-    # Story segments → LLM-assigned emotions
-    for i, emotion in enumerate(emotions):
-        seg_idx = story_offset + i
-        if seg_idx >= len(segments):
-            break
-        start_sec = seg_start_times[seg_idx]
-        end_sec = seg_start_times[seg_idx + 1] if seg_idx + 1 < len(seg_start_times) else total_duration
-        schedule.append((start_sec, end_sec, emotion))
-
-    # Closing sign-off segment ([CLOSE]) → a cheerful 'happy' for the wave-off.
-    if has_close:
-        close_idx = len(segments) - 1
-        schedule.append((seg_start_times[close_idx], total_duration, 'happy'))
+    seq = 0
+    for s in segs:
+        if s['kind'] == 'intro':
+            schedule.append((s['start'], s['end'], 'explain'))
+        elif s['kind'] == 'close':
+            schedule.append((s['start'], s['end'], 'happy'))
+        else:  # item
+            n = s['num'] if s['num'] is not None else seq + 1
+            seq += 1
+            emo = emotions[n - 1] if 1 <= n <= len(emotions) else 'explain'
+            emo = emo.lower() if isinstance(emo, str) else 'explain'
+            if emo not in VALID:
+                emo = 'explain'
+            schedule.append((s['start'], s['end'], emo))
 
     return schedule
 

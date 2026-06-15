@@ -275,7 +275,8 @@ async function main() {
   // place over the image's bottom-left (compose.js applies the transform).
   if (theme === 'newshound-fb') {
     // James as a CENTERED bottom presenter, ~10% bigger than the first pass.
-    composite.avatar = { crop: '760:704:160:0', scale: 0.64, x: 297, y: 1078 };
+    // y nudged down 10px (1078->1088); still ~40px above captionTop (1580).
+    composite.avatar = { crop: '760:704:160:0', scale: 0.64, x: 297, y: 1088 };
   }
 
   if (narration.isNH) {
