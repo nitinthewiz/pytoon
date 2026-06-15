@@ -1,27 +1,35 @@
 import React from 'react';
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { ANTON, INTER } from '../../fonts';
-import { NH, BRAND } from '../newshound';
+import { NH } from '../newshound';
 import { BOTTOM_BAR_H } from '../../layout';
 import { Ticker } from './Furniture';
 import { StoryBeats } from './StoryBeats';
-import { SectionBadge } from './Sections';
+import { sectionOf, SECTION_BADGE } from './Sections';
 import { type NewsItem } from '../../types';
 
 type Props = { item: NewsItem; index?: number; total?: number; ticker?: string };
 
-const HEADER_H = 300;    // charcoal header (counter + category + name plate); LIVE removed
+const HEADER_H = 250;    // charcoal header (counter + topic plate); image starts higher so the headline overlaps it
 const IMG_TOP = HEADER_H;
 const IMG_BOTTOM = 1452; // image/beat zone fills the middle
 
-// "Anchor" layout: the TAKE on top (up to 3 lines, 3rd overlaps the image), the
-// image/beat zone in the middle, James a centered bottom presenter (compose.js),
-// captions below him.
+// "Anchor" layout: a small TOPIC // one-liner plate on top, then the actual news
+// HEADLINE (up to 3 lines, last line overlaps the image), the image/beat zone in
+// the middle, James a centered bottom presenter (compose.js), captions below him.
 export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ticker }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const take = item.take ?? item.title ?? '';
-  const category = (item.category && item.category !== 'general' ? item.category : 'Top Story').toUpperCase();
+  // topic (black) = the rundown teaser (top stories only); one-liner (orange) = the
+  // LLM take; the big white text = the actual news headline.
+  const topic = (item.teaser ?? '').toUpperCase();
+  const oneLiner = (item.take ?? '').toUpperCase();
+  const headline = (item.title ?? item.take ?? '').toUpperCase();
+  const section = sectionOf(item);
+  // ONE badge: section label for sports/fun, otherwise the LLM category/tag.
+  const category = (section !== 'top'
+    ? (SECTION_BADGE[section] ?? section.toUpperCase())
+    : (item.category && item.category !== 'general' ? item.category : 'Top Story')).toUpperCase();
 
   const headIn = spring({ frame: frame - 3, fps, config: { damping: 16, mass: 0.7 } });
   const headX = interpolate(headIn, [0, 1], [-700, 0]);
@@ -48,21 +56,19 @@ export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ti
           </div>
         ))}
       </div>
-      {/* category bug (kept — becomes Top Story / Sports / Business … from the LLM tag) */}
-      <div style={{ position: 'absolute', top: 40, right: 40, background: NH.cyan, padding: '10px 22px', transform: `skewX(-8deg) translateX(${interpolate(catIn, [0, 1], [220, 0])}px)`, opacity: catIn }}>
+      {/* single category / section badge (Top Story / Sports / Culture …) */}
+      <div style={{ position: 'absolute', top: 36, right: 40, background: NH.cyan, padding: '10px 22px', transform: `skewX(-8deg) translateX(${interpolate(catIn, [0, 1], [220, 0])}px)`, opacity: catIn }}>
         <span style={{ display: 'block', transform: 'skewX(8deg)', fontFamily: ANTON, fontSize: 32, color: NH.ink, letterSpacing: 2 }}>{category}</span>
       </div>
-      {/* persistent section badge (SPORTS / FUN) — non-top stories only */}
-      <SectionBadge item={item} />
 
-      {/* name plate + take chyron (up to 3 lines; 3rd overlaps the image) */}
-      <div style={{ position: 'absolute', top: 96, left: 40, right: 40, transform: `translateX(${headX}px)`, opacity: headIn, zIndex: 5 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', background: NH.yellow, padding: '6px 18px', marginBottom: 10 }}>
-          <span style={{ fontFamily: ANTON, fontSize: 30, color: NH.ink, letterSpacing: 1 }}>{BRAND.anchor}</span>
-          <span style={{ fontFamily: INTER, fontWeight: 900, fontSize: 22, color: NH.orange, marginLeft: 12, letterSpacing: 2 }}>// THE TAKE</span>
+      {/* TOPIC // one-liner plate, then the news HEADLINE (last line overlaps the image) */}
+      <div style={{ position: 'absolute', top: 44, left: 40, right: 40, transform: `translateX(${headX}px)`, opacity: headIn, zIndex: 5 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', background: NH.yellow, padding: '6px 18px', marginBottom: 12 }}>
+          {topic && <span style={{ fontFamily: ANTON, fontSize: 30, color: NH.ink, letterSpacing: 1 }}>{topic}</span>}
+          {oneLiner && <span style={{ fontFamily: INTER, fontWeight: 900, fontSize: 24, color: NH.orange, marginLeft: topic ? 12 : 0, letterSpacing: 1 }}>{topic ? `// ${oneLiner}` : oneLiner}</span>}
         </div>
         <div style={{ position: 'relative', borderLeft: `14px solid ${NH.yellow}`, paddingLeft: 22 }}>
-          <span style={{ fontFamily: ANTON, fontSize: 64, lineHeight: 1.0, color: NH.white, letterSpacing: 0.5, textTransform: 'uppercase', textShadow: '0 4px 18px rgba(0,0,0,0.85)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{take}</span>
+          <span style={{ fontFamily: ANTON, fontSize: 54, lineHeight: 1.02, color: NH.white, letterSpacing: 0.5, textTransform: 'uppercase', textShadow: '0 4px 18px rgba(0,0,0,0.9)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{headline}</span>
           <div style={{ position: 'absolute', left: 22, bottom: -12, height: 6, width: `${sweep}%`, maxWidth: 'calc(100% - 22px)', background: NH.cyan, boxShadow: `0 0 12px ${NH.cyan}` }} />
         </div>
       </div>
