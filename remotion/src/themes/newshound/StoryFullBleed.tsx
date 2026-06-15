@@ -5,6 +5,7 @@ import { NH, BRAND } from '../newshound';
 import { BOTTOM_BAR_H } from '../../layout';
 import { Ticker } from './Furniture';
 import { StoryBeats } from './StoryBeats';
+import { SectionBadge } from './Sections';
 import { type NewsItem } from '../../types';
 
 type Props = { item: NewsItem; index?: number; total?: number; ticker?: string };
@@ -51,6 +52,8 @@ export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ti
       <div style={{ position: 'absolute', top: 40, right: 40, background: NH.cyan, padding: '10px 22px', transform: `skewX(-8deg) translateX(${interpolate(catIn, [0, 1], [220, 0])}px)`, opacity: catIn }}>
         <span style={{ display: 'block', transform: 'skewX(8deg)', fontFamily: ANTON, fontSize: 32, color: NH.ink, letterSpacing: 2 }}>{category}</span>
       </div>
+      {/* persistent section badge (SPORTS / FUN) — non-top stories only */}
+      <SectionBadge item={item} />
 
       {/* name plate + take chyron (up to 3 lines; 3rd overlaps the image) */}
       <div style={{ position: 'absolute', top: 96, left: 40, right: 40, transform: `translateX(${headX}px)`, opacity: headIn, zIndex: 5 }}>

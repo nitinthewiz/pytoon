@@ -12,11 +12,14 @@ import { FPS, SCENE_TRANSITION_FRAMES } from '../../production';
 import { TRANSITION_FRAMES } from '../../layout';
 import { openingFrames, headlinesFrames, storiesFrames, closingFrames } from './Show';
 import { stingerWipe } from './StingerWipe';
+import { SectionCard, sectionOf, startsNewSection, rundownMoreLine } from './Sections';
 import { type CompositionProps, type NewsItem } from '../../types';
 
 const isTeaser = (it: NewsItem) => it.imagePath === null && (it.teaserImages?.length ?? 0) > 0;
 
-// Full-bleed stories block (newshound-fb theme).
+// Full-bleed stories block (newshound-fb theme). Handles any number of stories;
+// 5+3+2 section manifests get a divider card overlayed on the first story of
+// each new section — never an extra scene (zero timeline impact, see Sections.tsx).
 const StoriesFB: React.FC<CompositionProps> = ({ items }) => {
   const stories = items.filter((it) => !isTeaser(it));
   const ticker = stories.map((s) => (s.take ?? s.title ?? '').toUpperCase()).filter(Boolean).join('     •     ');
@@ -27,6 +30,7 @@ const StoriesFB: React.FC<CompositionProps> = ({ items }) => {
           <React.Fragment key={i}>
             <TransitionSeries.Sequence durationInFrames={item.durationInFrames}>
               <StoryFullBleed item={item} index={i} total={stories.length} ticker={ticker} />
+              {startsNewSection(stories, i) && <SectionCard section={sectionOf(item)} />}
             </TransitionSeries.Sequence>
             {i < stories.length - 1 && (
               // Branded stinger wipe between stories (timed with the transition
@@ -45,8 +49,12 @@ const StoriesFB: React.FC<CompositionProps> = ({ items }) => {
 };
 
 export const NewshoundShowFB: React.FC<CompositionProps> = ({ items, captions, closingFrames: closeF }) => {
+  const stories = items.filter((it) => !isTeaser(it));
   // Rundown uses the LLM teasers (≠ the narration); falls back to take/title.
-  const headlines = items.filter((it) => !isTeaser(it)).map((it) => it.teaser ?? it.take ?? it.title).filter((t): t is string => Boolean(t));
+  // Sectioned shows list ONLY the top-section teasers (max 5) and tease the
+  // rest with one static line ("...plus sports and the fun stuff.").
+  const headlines = stories.filter((it) => sectionOf(it) === 'top').map((it) => it.teaser ?? it.take ?? it.title).filter((t): t is string => Boolean(t));
+  const moreLine = rundownMoreLine(stories);
   const t = () => linearTiming({ durationInFrames: SCENE_TRANSITION_FRAMES });
   const headF = headlinesFrames(items);
   return (
@@ -57,7 +65,7 @@ export const NewshoundShowFB: React.FC<CompositionProps> = ({ items, captions, c
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={t()} presentation={fade()} />
         <TransitionSeries.Sequence durationInFrames={headF}>
-          <Headlines headlines={headlines} durationInFrames={headF} />
+          <Headlines headlines={headlines} durationInFrames={headF} moreLine={moreLine} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition timing={t()} presentation={slide({ direction: 'from-bottom' })} />
         <TransitionSeries.Sequence durationInFrames={storiesFrames(items)}>

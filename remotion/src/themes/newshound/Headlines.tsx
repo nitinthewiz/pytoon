@@ -5,16 +5,23 @@ import { NH } from '../newshound';
 import { AVATAR_ZONE_H, BOTTOM_BAR_H } from '../../layout';
 import { StudioBackdrop, Ticker } from './Furniture';
 
-type Props = { headlines: string[]; durationInFrames: number };
+type Props = {
+  headlines: string[];
+  durationInFrames: number;
+  // Static final row teasing the non-top sections ("...plus sports and the fun
+  // stuff."). Absent on classic 5-story shows — layout is then unchanged.
+  moreLine?: string;
+};
 
 // "THE RUNDOWN" — James teases the slate (intro narration). Avatar sits in the
 // studio zone up top; the rundown reveals beneath, one item at a time.
-export const Headlines: React.FC<Props> = ({ headlines, durationInFrames }) => {
+export const Headlines: React.FC<Props> = ({ headlines, durationInFrames, moreLine }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const items = headlines.slice(0, 5);
+  const rowCount = items.length + (moreLine ? 1 : 0);
   const revealWindow = durationInFrames * 0.62;
-  const step = items.length ? revealWindow / items.length : 0;
+  const step = rowCount ? revealWindow / rowCount : 0;
 
   const titleIn = spring({ frame: frame - 4, fps, config: { damping: 14 } });
 
@@ -46,6 +53,18 @@ export const Headlines: React.FC<Props> = ({ headlines, durationInFrames }) => {
               </div>
             );
           })}
+          {moreLine && (() => {
+            // Section tease — same row anatomy as a teaser, yellow "+" chip.
+            const enter = spring({ frame: frame - items.length * step, fps, config: { damping: 16 } });
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 22, opacity: enter, transform: `translateX(${interpolate(enter, [0, 1], [-80, 0])}px)` }}>
+                <div style={{ flexShrink: 0, width: 70, height: 70, background: NH.yellow, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: ANTON, fontSize: 42, color: NH.ink, transform: 'skewX(-8deg)' }}>
+                  <span style={{ transform: 'skewX(8deg)' }}>+</span>
+                </div>
+                <span style={{ fontFamily: INTER, fontWeight: 700, fontSize: 40, color: NH.yellow, lineHeight: 1.1 }}>{moreLine}</span>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

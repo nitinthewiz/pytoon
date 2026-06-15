@@ -1,0 +1,95 @@
+{
+  "_comment": "Synthetic 10-story 5+3+2 fixture (5 top + 3 sports + 2 entertainment) for NewshoundShowFB stills. imagePath reuses gitignored remotion/public/images/0-4.jpg from any prior local run. Key frames @30fps: rundown 170, sports divider 700, sports badge 745, entertainment divider 1015.",
+  "items": [
+    {
+      "imagePath": null,
+      "durationInFrames": 115,
+      "teaserImages": [
+        "images/0.jpg"
+      ]
+    },
+    {
+      "imagePath": "images/0.jpg",
+      "durationInFrames": 120,
+      "title": "India-China envoy lecture",
+      "take": "TWO GIANTS TALK SCHOOL",
+      "teaser": "India and China play nice (for once)",
+      "category": "world"
+    },
+    {
+      "imagePath": "images/1.jpg",
+      "durationInFrames": 120,
+      "title": "UK PM condemns Vance remarks",
+      "take": "STARMER VS VANCE: ROUND ONE",
+      "teaser": "A transatlantic war of words",
+      "category": "politics"
+    },
+    {
+      "imagePath": "images/2.jpg",
+      "durationInFrames": 120,
+      "title": "Senegal leadership rift",
+      "take": "BEST FRIENDS TO BITTER RIVALS",
+      "teaser": "Senegal: the bromance is over",
+      "category": "politics"
+    },
+    {
+      "imagePath": "images/3.jpg",
+      "durationInFrames": 120,
+      "title": "Cancer misdiagnosis tragedy",
+      "take": "ONE DIAGNOSIS, TWO LIVES LOST",
+      "teaser": "A misdiagnosis with a cruel twist",
+      "category": "health"
+    },
+    {
+      "imagePath": "images/4.jpg",
+      "durationInFrames": 120,
+      "title": "SF Tenderloin drug crisis",
+      "take": "20X STRONGER THAN FENTANYL",
+      "teaser": "The drug freezing San Francisco",
+      "category": "general"
+    },
+    {
+      "imagePath": "images/0.jpg",
+      "durationInFrames": 120,
+      "title": "Local club wins derby",
+      "take": "DERBY DAY DEMOLITION",
+      "category": "sports",
+      "section": "sports"
+    },
+    {
+      "imagePath": "images/1.jpg",
+      "durationInFrames": 120,
+      "title": "Star striker transfer saga",
+      "take": "THE 100M QUESTION",
+      "category": "sports",
+      "section": "sports"
+    },
+    {
+      "imagePath": "images/2.jpg",
+      "durationInFrames": 120,
+      "title": "Marathon record shattered",
+      "take": "TWO HOURS IS SO LAST YEAR",
+      "category": "sports",
+      "section": "sports"
+    },
+    {
+      "imagePath": "images/3.jpg",
+      "durationInFrames": 120,
+      "title": "Blockbuster sequel announced",
+      "take": "THEY ARE MAKING ANOTHER ONE",
+      "category": "entertainment",
+      "section": "entertainment"
+    },
+    {
+      "imagePath": "images/4.jpg",
+      "durationInFrames": 120,
+      "title": "Pop star surprise album",
+      "take": "DROPPED AT MIDNIGHT, BROKE THE INTERNET",
+      "category": "entertainment",
+      "section": "entertainment"
+    }
+  ],
+  "captions": [],
+  "captionTop": 1580,
+  "closingFrames": 120
+}

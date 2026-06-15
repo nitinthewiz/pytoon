@@ -117,6 +117,10 @@ async function main() {
     return;
   }
 
+  // N stories, generically: 5 today, up to 10 with the 5+3+2 section format
+  // (news[] items then carry section:'top'|'sports'|'entertainment'). Every
+  // story gets a scene + an emotion bed; sections are purely visual overlays
+  // in the theme (divider card + badge) and never touch the timeline.
   const count = Math.min(storySegments.length, newsItems.length);
 
   // itemCount includes the blank intro slide (if any) + story slides
@@ -159,6 +163,11 @@ async function main() {
     const newsItem = newsItems[clampedIdx];
     const durationInFrames = segmentDurations[hasIntro ? i + 1 : i];
 
+    // Show section (5+3+2 format): normalized lowercase, omitted when absent so
+    // classic 5-story manifests keep byte-identical render props.
+    const section = typeof newsItem.section === 'string' && newsItem.section.trim()
+      ? newsItem.section.trim().toLowerCase()
+      : undefined;
     const storyMeta = {
       title: newsItem.title || '',
       source: newsItem.source || '',
@@ -166,6 +175,7 @@ async function main() {
       category: (tags && tags[i]) || newsItem.category || 'Top News',
       take: (takes && takes[i]) || undefined,
       teaser: (teasers && teasers[i]) || undefined,
+      ...(section ? { section } : {}),
     };
     // Map the LLM's visual beats; fill the 'photo' beat's src with the local image below.
     const rawVisuals = visualsArr && visualsArr[i];

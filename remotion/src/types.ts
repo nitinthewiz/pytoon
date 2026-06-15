@@ -13,8 +13,12 @@ export type NewsItem = {
   durationInFrames: number;
   title?: string;
   take?: string; // James's punchy chyron line (falls back to title until the script feeds it)
+  teaser?: string; // rundown line for the Headlines scene (LLM-written; top stories only)
   source?: string;
   category?: string;
+  // Show section for the 5+3+2 format: 'top' | 'sports' | 'entertainment'.
+  // Absent = 'top'. Purely visual (divider card + badge) — never affects timing.
+  section?: string;
   visuals?: Visual[]; // multi-beat enrichment; falls back to a single photo beat
   teaserImages?: string[]; // intro slide: paths to all story images for the hook teaser
 };
