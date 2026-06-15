@@ -61,8 +61,9 @@ export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ti
         <span style={{ display: 'block', transform: 'skewX(8deg)', fontFamily: ANTON, fontSize: 32, color: NH.ink, letterSpacing: 2 }}>{category}</span>
       </div>
 
-      {/* TOPIC // one-liner plate, then the news HEADLINE (last line overlaps the image) */}
-      <div style={{ position: 'absolute', top: 44, left: 40, right: 40, transform: `translateX(${headX}px)`, opacity: headIn, zIndex: 5 }}>
+      {/* TOPIC // one-liner plate, then the news HEADLINE (last line overlaps the image).
+          top:78 keeps the headline's first line clear of the top-right category badge. */}
+      <div style={{ position: 'absolute', top: 78, left: 40, right: 40, transform: `translateX(${headX}px)`, opacity: headIn, zIndex: 5 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', background: NH.yellow, padding: '6px 18px', marginBottom: 12 }}>
           {topic && <span style={{ fontFamily: ANTON, fontSize: 30, color: NH.ink, letterSpacing: 1 }}>{topic}</span>}
           {oneLiner && <span style={{ fontFamily: INTER, fontWeight: 900, fontSize: 24, color: NH.orange, marginLeft: topic ? 12 : 0, letterSpacing: 1 }}>{topic ? `// ${oneLiner}` : oneLiner}</span>}
