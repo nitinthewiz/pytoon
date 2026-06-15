@@ -124,16 +124,9 @@ jobs:
         name: background_video.mp4
         path: background_video.mp4
 
-    # Direct-from-runner Telegram post (multipart sendVideo of the actual file).
-    # DIAGNOSTIC (2026-06-15): re-enabled for v2 runs TOO, to A/B against the n8n
-    # "4. Publish" post. The file is provably 1080x1920 SAR 1:1 + faststart, yet the
-    # n8n Telegram node's re-upload shows squished on mobile; this direct multipart
-    # upload lets Telegram auto-detect the aspect from the file. This post lands
-    # FIRST (right after render) and has NO caption; the n8n post lands ~30-60s later
-    # WITH the title caption. Once we know which one displays correctly, gate the
-    # other off (and mirror the choice for the cover).
+    # Legacy direct Telegram post — OLD-workflow runs only (no manifest_b64).
     - name: Upload video file to telegram using xireiki/channel-post@v2
-      if: ${{ success() }}
+      if: ${{ success() && inputs.manifest_b64 == '' }}
       continue-on-error: true
       uses: xireiki/channel-post@v2
       with:
@@ -141,6 +134,42 @@ jobs:
         chat_id: ${{ secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID }}
         path: animation.mp4
         method: sendVideo
+
+    # v2 video post — RAW Telegram Bot API (fixes the mobile "squished" playback).
+    # The file is provably 1080x1920 SAR 1:1, but Telegram's inline player squishes
+    # vertical videos unless it gets ALL of: a portrait thumbnail (it sizes the
+    # preview to the thumb), supports_streaming=true (treated as a real video, not a
+    # document), and explicit width/height. Neither xireiki nor the n8n Telegram node
+    # sends these, so both squished identically. This is the n8n "Post Video" path's
+    # replacement for v2 runs (that node is disabled in WF4).
+    - name: Post video to Telegram (raw Bot API, correct vertical aspect)
+      if: ${{ success() && inputs.manifest_b64 != '' }}
+      continue-on-error: true
+      shell: pwsh
+      env:
+        TG_TOKEN: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
+        TG_CHAT: ${{ secrets.TELEGRAM_AUTOMEDIA_NEW_VIDEOS_CHAT_ID }}
+      run: |
+        # 9:16 poster thumbnail, <=320px on the long side (Telegram's thumb limit).
+        ffmpeg -y -loglevel error -i animation.mp4 -vf "scale=-2:320" -frames:v 1 tg_thumb.jpg
+        $cap = "James Newshound"
+        try {
+          $m = Get-Content 'manifest.json' -Raw | ConvertFrom-Json
+          $take = ($m.takes[0] -replace '[^\w \-.,!?]', '')
+          $ed = $m.edition
+          $cap = "$take | " + $ed.country.ToUpper() + " " + $ed.edition + " " + $ed.date
+        } catch {}
+        curl.exe -s -o tg_resp.json `
+          -F "chat_id=$env:TG_CHAT" `
+          -F "video=@animation.mp4" `
+          -F "thumbnail=@tg_thumb.jpg" `
+          -F "supports_streaming=true" `
+          -F "width=1080" -F "height=1920" `
+          -F "caption=$cap" `
+          "https://api.telegram.org/bot$env:TG_TOKEN/sendVideo"
+        $r = Get-Content tg_resp.json -Raw | ConvertFrom-Json
+        if ($r.ok) { Write-Host "Telegram sendVideo OK (message_id $($r.result.message_id))" }
+        else { Write-Host "Telegram sendVideo FAILED: $($r.description)" }
 
     # ---- v2 publish-back loop ----
     # The manifest carries video_key (where to put the video in MinIO) and
