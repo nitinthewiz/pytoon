@@ -12,8 +12,9 @@ on:
         default: 'speech.mp3'
       # v2 contract: ONE manifest replaces the per-field b64 inputs. JSON shape:
       # { version, production, edition:{country,edition,date,tz}, channels:{...},
-      #   callback_url, video_key, news:[5 selected items], speech, captions,
-      #   emotions, takes, teasers, tags, visuals }
+      #   callback_url, video_key, news:[N selected items — 5 classic, or 10 in
+      #   the 5+3+2 format where items carry section:'top'|'sports'|'entertainment'],
+      #   speech, captions, emotions, takes, teasers, tags, visuals }
       # [ITEM:N] markers in speech are 1-based indices into manifest.news.
       manifest_b64:
         description: 'Base64 JSON manifest with all show data (v2 contract)'
@@ -123,8 +124,12 @@ jobs:
         name: background_video.mp4
         path: background_video.mp4
 
+    # Legacy direct Telegram post — OLD workflow runs only (no manifest_b64).
+    # It sends the video without width/height, so Telegram shows it squished.
+    # v2 manifest runs skip it: n8n "4. Publish" posts the video properly via
+    # the callback below, and posting here too produced a squished duplicate.
     - name: Upload video file to telegram using xireiki/channel-post@v2
-      if: ${{ success() }}
+      if: ${{ success() && inputs.manifest_b64 == '' }}
       uses: xireiki/channel-post@v2
       with:
         bot_token: ${{ secrets.TELEGRAM_AM_NEW_MEDIA_BOT_TOKEN }}
