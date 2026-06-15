@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Img, staticFile, interpolate, Easing } from 'remotion';
+import { AbsoluteFill, Img, staticFile, interpolate, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
 import { TransitionSeries, linearTiming } from '@remotion/transitions';
 import type {
   TransitionPresentation,
@@ -106,6 +106,84 @@ export const stingerWipe = (
   component: StingerWipePresentation,
   props: props ?? {},
 });
+
+// ---------------------------------------------------------------------------
+// OVERLAY form (absolute-frame timeline). The scenes are now plain hard cuts;
+// the branded wipe is drawn ON TOP, centred on the boundary, masking the cut as
+// the band whips through. Mount in: <Sequence from={boundary - WIPE/2}
+// durationInFrames={WIPE}><StingerWipeOverlay/></Sequence>. The band is the same
+// Newshound-Yellow skewed band (NEWSHOUND wordmark + James) as the presentation
+// above, so the look is unchanged.
+// ---------------------------------------------------------------------------
+
+// Shared band visual — `progress` 0..1 sweeps it left->right; covers the whole
+// 1080px frame around progress 0.5 (where the hard cut sits beneath it).
+const StingerBand: React.FC<{ progress: number; label?: string }> = ({ progress, label }) => {
+  const x = interpolate(progress, [0, 1], [SWEEP[0], SWEEP[1]], {
+    easing: Easing.inOut(Easing.cubic),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', pointerEvents: 'none', zIndex: 60 }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: '-10%',
+          height: '120%',
+          left: '-30%',
+          width: '160%',
+          transform: `translateX(${x}%) skewX(-12deg)`,
+          background: `linear-gradient(180deg, ${NH.yellow} 0%, #F2A816 100%)`,
+          borderLeft: `12px solid ${NH.ink}`,
+          borderRight: `12px solid ${NH.ink}`,
+          boxShadow: '0 0 90px rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ transform: 'skewX(12deg)', display: 'flex', alignItems: 'center', gap: 36, whiteSpace: 'nowrap' }}>
+          <Img src={staticFile('james.png')} style={{ height: 260, transform: 'rotate(-6deg)', filter: `drop-shadow(0 10px 0 ${NH.orange})` }} />
+          <span style={{ fontFamily: ANTON, fontSize: 150, color: NH.ink, letterSpacing: 8, textShadow: `0 6px 0 ${NH.orange}` }}>
+            {label ?? BRAND.name}
+          </span>
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// Story->story branded wipe overlay. Local frame 0..(duration) drives the band
+// across; the cut sits at the middle frame. Keep duration ~= WIPE_FRAMES (15).
+export const StingerWipeOverlay: React.FC<{ label?: string }> = ({ label }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const progress = durationInFrames > 1 ? frame / (durationInFrames - 1) : 0;
+  return <StingerBand progress={progress} label={label} />;
+};
+
+// Scene-boundary overlay (Opening->Headlines, Headlines->Stories, Stories->Closing).
+// A quick branded yellow flash + faint band kiss, tasteful and short — the user
+// chose "branded wipe" over a cross-dissolve, but the section cuts get a lighter
+// touch than the full story stinger so they read as bigger beats, not story flips.
+export const SceneFlashOverlay: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const mid = (durationInFrames - 1) / 2;
+  // Symmetric flash that peaks at the cut (mid frame) and fades out both sides.
+  const flash = interpolate(frame, [0, mid, durationInFrames - 1], [0, 0.85, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none', zIndex: 55 }}>
+      {/* brand-yellow wash kissing the cut */}
+      <AbsoluteFill style={{ background: NH.yellow, opacity: flash * 0.5 }} />
+      <AbsoluteFill style={{ background: NH.white, opacity: flash * 0.5 }} />
+    </AbsoluteFill>
+  );
+};
 
 // Studio preview (`NHStingerWipe` in Root.tsx): two placeholder "stories" with
 // the wipe between them — scrub frames ~22–37 to see the band sweep.

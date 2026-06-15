@@ -47,8 +47,8 @@ export const Root: React.FC = () => {
   return (
     <>
       {/* === Newshound theme (active) === */}
-      <Composition id="NewshoundShow" component={NewshoundShow} durationInFrames={300} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={DEFAULT_PROPS} calculateMetadata={async ({ props }) => ({ durationInFrames: showDurationFrames(props.items) })} />
-      <Composition id="NewshoundShowFB" component={NewshoundShowFB} durationInFrames={300} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={DEFAULT_PROPS} calculateMetadata={async ({ props }) => ({ durationInFrames: showDurationFrames(props.items, props.closingFrames) })} />
+      <Composition id="NewshoundShow" component={NewshoundShow} durationInFrames={300} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={DEFAULT_PROPS} calculateMetadata={async ({ props }) => ({ durationInFrames: showDurationFrames(props.items, props.closingFrames, props.timeline) })} />
+      <Composition id="NewshoundShowFB" component={NewshoundShowFB} durationInFrames={300} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={DEFAULT_PROPS} calculateMetadata={async ({ props }) => ({ durationInFrames: showDurationFrames(props.items, props.closingFrames, props.timeline) })} />
       <Composition id="NHStoryFB" component={StoryFullBleed} durationInFrames={150} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ item: SAMPLE_ITEM, index: 1, total: 5 }} />
       <Composition id="NHFlagClash" component={FlagClash} durationInFrames={90} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ a: 'in', b: 'cn', mode: 'cooperate', labelA: 'INDIA', labelB: 'CHINA' }} />
       <Composition id="NHNumberCard" component={NumberCard} durationInFrames={90} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={{ value: '20x', label: 'more potent than fentanyl' }} />

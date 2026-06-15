@@ -12,30 +12,43 @@ import { FPS, SCENE_TRANSITION_FRAMES } from '../../production';
 import { TRANSITION_FRAMES } from '../../layout';
 import { openingFrames, headlinesFrames, storiesFrames, closingFrames } from './Show';
 import { stingerWipe } from './StingerWipe';
+import { ShowLayout } from './ShowLayout';
 import { SectionCard, sectionOf, startsNewSection, rundownMoreLine } from './Sections';
 import { type CompositionProps, type NewsItem } from '../../types';
 
 const isTeaser = (it: NewsItem) => it.imagePath === null && (it.teaserImages?.length ?? 0) > 0;
 
-// Full-bleed stories block (newshound-fb theme). Handles any number of stories;
-// 5+3+2 section manifests get a divider card overlayed on the first story of
-// each new section — never an extra scene (zero timeline impact, see Sections.tsx).
+// Rundown headlines for the fb theme: LLM teasers (top section only), max 5.
+const fbHeadlines = (stories: NewsItem[]) =>
+  stories.filter((it) => sectionOf(it) === 'top').map((it) => it.teaser ?? it.take ?? it.title).filter((t): t is string => Boolean(t));
+
+const storyTicker = (stories: NewsItem[]) =>
+  stories.map((s) => (s.take ?? s.title ?? '').toUpperCase()).filter(Boolean).join('     •     ');
+
+// One full-bleed story + (when it opens a new section) the divider card overlay.
+// The SectionCard mounts INSIDE the story (frame 0 = story start) and sweeps off
+// after SECTION_CARD_FRAMES, revealing the story already running beneath — zero
+// timeline impact, exactly as before.
+const FBStory: React.FC<{ stories: NewsItem[]; item: NewsItem; index: number; total: number; ticker: string }> = ({ stories, item, index, total, ticker }) => (
+  <>
+    <StoryFullBleed item={item} index={index} total={total} ticker={ticker} />
+    {startsNewSection(stories, index) && <SectionCard section={sectionOf(item)} />}
+  </>
+);
+
+// Legacy full-bleed stories block (fallback path only — no props.timeline).
 const StoriesFB: React.FC<CompositionProps> = ({ items }) => {
   const stories = items.filter((it) => !isTeaser(it));
-  const ticker = stories.map((s) => (s.take ?? s.title ?? '').toUpperCase()).filter(Boolean).join('     •     ');
+  const ticker = storyTicker(stories);
   return (
     <AbsoluteFill style={{ background: NH.charcoal }}>
       <TransitionSeries>
         {stories.map((item, i) => (
           <React.Fragment key={i}>
             <TransitionSeries.Sequence durationInFrames={item.durationInFrames}>
-              <StoryFullBleed item={item} index={i} total={stories.length} ticker={ticker} />
-              {startsNewSection(stories, i) && <SectionCard section={sectionOf(item)} />}
+              <FBStory stories={stories} item={item} index={i} total={stories.length} ticker={ticker} />
             </TransitionSeries.Sequence>
             {i < stories.length - 1 && (
-              // Branded stinger wipe between stories (timed with the transition
-              // stingers compose.js drops at each storyBoundaries cut). Keep
-              // TRANSITION_FRAMES — build_background's slide timing math uses it.
               <TransitionSeries.Transition
                 timing={linearTiming({ durationInFrames: TRANSITION_FRAMES })}
                 presentation={stingerWipe()}
@@ -48,13 +61,30 @@ const StoriesFB: React.FC<CompositionProps> = ({ items }) => {
   );
 };
 
-export const NewshoundShowFB: React.FC<CompositionProps> = ({ items, captions, closingFrames: closeF }) => {
+export const NewshoundShowFB: React.FC<CompositionProps> = ({ items, captions, closingFrames: closeF, timeline }) => {
   const stories = items.filter((it) => !isTeaser(it));
-  // Rundown uses the LLM teasers (≠ the narration); falls back to take/title.
-  // Sectioned shows list ONLY the top-section teasers (max 5) and tease the
-  // rest with one static line ("...plus sports and the fun stuff.").
-  const headlines = stories.filter((it) => sectionOf(it) === 'top').map((it) => it.teaser ?? it.take ?? it.title).filter((t): t is string => Boolean(t));
+  const headlines = fbHeadlines(stories);
   const moreLine = rundownMoreLine(stories);
+
+  // --- Absolute-frame layout (real renders) -------------------------------
+  if (timeline) {
+    const ticker = storyTicker(stories);
+    const headLen = timeline.storyStartFrames[0] - timeline.headlinesStartFrame;
+    return (
+      <ShowLayout
+        stories={stories}
+        timeline={timeline}
+        scenes={{
+          opening: <Opening />,
+          headlines: <Headlines headlines={headlines} durationInFrames={headLen} moreLine={moreLine} />,
+          story: (item, i, total) => <FBStory stories={stories} item={item} index={i} total={total} ticker={ticker} />,
+          closing: <ClosingFB />,
+        }}
+      />
+    );
+  }
+
+  // --- Legacy fallback (no timeline: previews / default props) ------------
   const t = () => linearTiming({ durationInFrames: SCENE_TRANSITION_FRAMES });
   const headF = headlinesFrames(items);
   return (

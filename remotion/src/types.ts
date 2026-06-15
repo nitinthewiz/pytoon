@@ -23,9 +23,25 @@ export type NewsItem = {
   teaserImages?: string[]; // intro slide: paths to all story images for the hook teaser
 };
 
+// Absolute-frame scene timeline (THE single source of truth, computed in
+// build_background.js and passed through render-props). Every value is a frame
+// on the final video timeline. The newshound themes lay plain, contiguous,
+// non-overlapping Sequences at these frames; transitions are drawn as OVERLAYS
+// centred on the hard cuts. Absent on standalone previews / default props, where
+// the themes fall back to the legacy duration-derived layout.
+export type SceneTimeline = {
+  openingFrames: number;        // opening scene length; headlines hard-cut follows
+  headlinesStartFrame: number;  // == openingFrames
+  storyStartFrames: number[];   // absolute start frame of each story scene
+  closingStartFrame: number | null; // absolute closing start; null when no [CLOSE]
+  showEndFrame: number;         // total composition duration (frames)
+  wipeFrames: number;           // overlay-wipe length at story->story cuts
+};
+
 export type CompositionProps = {
   items: NewsItem[];
   captions?: Caption[];
   captionTop?: number;      // caption Y (theme-dependent)
   closingFrames?: number;   // Closing scene length when the sign-off has its own [CLOSE] segment
+  timeline?: SceneTimeline; // absolute scene frames (newshound themes); see above
 };
