@@ -25,6 +25,17 @@ const WIPE_FRAMES = 15;
 // boundaries can disagree by ~1f between the JS and TS sides; +-2 absorbs that
 // without ever masking a real drift (the old bug was 4+ frames and grew).
 const SYNC_TOL_FRAMES = 2;
+// Independent collapse floors for assertTimelineSync (FIX B). These do NOT derive
+// from the caption->scene mapping, so they FAIL the build when that mapping
+// collapses (the old dVframe check was circular -- both sides came from the same
+// mapping, so it printed "SYNC OK" on a fully collapsed timeline). 2026-06-15.
+const MIN_STORY_LEN_FRAMES = 30;   // every story scene >= 1.0s on screen
+const MIN_STORY_GAP_FRAMES = 15;   // consecutive story starts >= 0.5s apart
+// Sanity bound: a story's allotted seconds vs its fair word-count share. Loose --
+// pacing legitimately varies (asides, pauses) -- it only catches gross collapse
+// the floors might miss in an odd edition. A story may run this many times its
+// fair share, or as little as 1/this; outside that is "insane", not just uneven.
+const STORY_SHARE_FACTOR = 6;
 
 function loadProduction() {
   return JSON.parse(fs.readFileSync(PRODUCTION_JSON, 'utf8'));
@@ -168,6 +179,66 @@ function assertTimelineSync(tl, ctx) {
   // 4) total duration == Closing end AND >= narrationStart + total narration.
   if (tl.showEndFrames < tl.narrEndF) {
     errs.push(`show end ${tl.showEndFrames}f < narration end ${tl.narrEndF}f -- video would under-run audio`);
+  }
+
+  // 5) INDEPENDENT COLLAPSE CHECKS (FIX B -- NON-circular). Checks 2/3 above
+  //    compare each scene start against narrationStart + its OWN audioSec -- both
+  //    sides come from the same caption->segment mapping, so they read dVframe=0
+  //    even when that mapping has collapsed every late story onto one instant (the
+  //    2026-06-15 stories-7..10 failure: "SYNC OK" while the video was broken).
+  //    These checks look only at the resulting frame geometry + word counts, so a
+  //    collapsed mapping FAILS the build instead of shipping.
+  //    Per-story scene lengths come from the ordered rows (next start - this start);
+  //    the last story's "next" is the closing or the show end.
+  const storyRows = rows.filter((r) => r.type.startsWith('story_'));
+  const startAfter = (r) => { // first scene start strictly after r in the timeline
+    const all = [...rows, endRow];
+    const idx = all.indexOf(r);
+    return all[idx + 1] ? all[idx + 1].startF : tl.showEndFrames;
+  };
+  // 5a) every STORY scene must be at least MIN_STORY_LEN_FRAMES long.
+  storyRows.forEach((r) => {
+    const lenF = startAfter(r) - r.startF;
+    if (lenF < MIN_STORY_LEN_FRAMES) {
+      errs.push(`story scene "${r.type}" is ${lenF}f long (< ${MIN_STORY_LEN_FRAMES}f floor) -- timeline collapsed`);
+    }
+  });
+  // 5b) consecutive STORY starts must be at least MIN_STORY_GAP_FRAMES apart AND
+  //     strictly increasing -- two stories may never share (or invert) an instant.
+  for (let i = 1; i < storyRows.length; i++) {
+    const gap = storyRows[i].startF - storyRows[i - 1].startF;
+    if (gap < MIN_STORY_GAP_FRAMES) {
+      errs.push(`stories "${storyRows[i - 1].type}"->"${storyRows[i].type}" start only ${gap}f apart (< ${MIN_STORY_GAP_FRAMES}f floor) -- collapse`);
+    }
+  }
+  // 5c) the LAST story must begin before narrationEnd minus its own minimum length
+  //     -- otherwise it has been shoved off the end of the audio (the collapse tell).
+  if (storyRows.length) {
+    const lastStory = storyRows[storyRows.length - 1];
+    const latestAllowed = tl.narrEndF - MIN_STORY_LEN_FRAMES;
+    if (lastStory.startF > latestAllowed) {
+      errs.push(`last story "${lastStory.type}" starts ${lastStory.startF}f > narrationEnd-${MIN_STORY_LEN_FRAMES}f (${latestAllowed}f) -- shoved past the audio`);
+    }
+  }
+  // 5d) sanity: a story's allotted seconds vs its fair word-count share. Loose
+  //     (factor STORY_SHARE_FACTOR each way); catches gross collapse the floors miss.
+  //     Skipped when word counts weren't supplied or are degenerate.
+  const wc = ctx.storyWordCounts;
+  if (Array.isArray(wc) && wc.length === storyRows.length) {
+    const totalWords = wc.reduce((a, b) => a + b, 0);
+    const storiesSpanF = storyRows.length
+      ? startAfter(storyRows[storyRows.length - 1]) - storyRows[0].startF
+      : 0;
+    if (totalWords > 0 && storiesSpanF > 0) {
+      storyRows.forEach((r, i) => {
+        if (!wc[i]) return;
+        const lenF = startAfter(r) - r.startF;
+        const fairF = (wc[i] / totalWords) * storiesSpanF;
+        if (lenF > fairF * STORY_SHARE_FACTOR || lenF < fairF / STORY_SHARE_FACTOR) {
+          errs.push(`story "${r.type}" len ${lenF}f deviates wildly from its ${wc[i]}-word fair share ~${Math.round(fairF)}f (>${STORY_SHARE_FACTOR}x or <1/${STORY_SHARE_FACTOR}x)`);
+        }
+      });
+    }
   }
 
   // --- SYNC REPORT --------------------------------------------------------
@@ -397,11 +468,15 @@ async function main() {
     storyCount, closeStartSec, closingFrames,
   });
 
-  // Build-time sync guard: the audio start each scene must hit (for the report).
+  // Build-time sync guard: the audio start each scene must hit (for the report),
+  // plus each story's word count for the independent share-sanity check (FIX B).
   const storyAudioSecs = [];
   for (let i = 0; i < storyCount; i++) storyAudioSecs.push(segStartSecs[storyBase + i] ?? 0);
+  const storyWordCounts = storySegments
+    .slice(0, count)
+    .map((seg) => seg.split(/\s+/).filter(Boolean).length);
   if (isNH) {
-    assertTimelineSync(timeline, { storyAudioSecs, closeAudioSec: closeStartSec });
+    assertTimelineSync(timeline, { storyAudioSecs, closeAudioSec: closeStartSec, storyWordCounts });
   }
 
   // Scene frames the Remotion comp consumes (newshound themes lay plain,
@@ -578,14 +653,35 @@ function contiguousFramesFromStarts(segStartSecs, totalDuration) {
 // Kokoro expands one written word into several spoken tokens ("2026" → "twenty
 // twenty-six"), and voices NO token at all for pure-punctuation words (the spunky
 // scripts' standalone "-" aside markers), so tokens don't map 1-to-1 with original
-// words. Per word: when the IMMEDIATE next word has recognisable alpha content, scan
-// a BOUNDED window ahead for its first token and let this word span everything before
-// it (this both covers expansions and re-syncs any drift). The bound is the critical
-// safety property: the 2026-06-11 us-AM edition drifted one token (a "-" aside),
-// then the unbounded hunt for "times" after "18" swallowed every remaining token —
-// captions froze on "18" and every later scene collapsed (the on-air "scenes blast
-// by, last screen frozen" failure). If the anchor isn't found within the window,
-// consume exactly one token and let the next word re-sync — NEVER eat the tail.
+// words -- but the counts are NEARLY equal (≈1 token per voiced word). The mapping
+// must therefore stay on the proportional DIAGONAL and never race the cursor to the
+// end of the token stream.
+//
+// The 2026-06-15 collapse: a 222-word script vs 206 word-tokens (nearly 1:1). The old
+// per-word "bounded resync" (window 15, 4-char PREFIX match) false-anchored on common
+// short next-words -- "and"→"the" ate 12 tokens, "money"→"to" ate 10 -- and raced the
+// cursor to the end by word ~147. The remaining ~75 words (stories 7-10 + close) then
+// hit the "tokens exhausted" net with ZERO leftover audio (the race consumed the FINAL
+// token), so every one of them collapsed to the same instant (81.8s) -> 0-frame scenes,
+// frozen captions, audio/video desync after story 6.
+//
+// Collapse-proofing (three guards, the first is load-bearing):
+//   1. PROPORTIONAL DIAGONAL, enforced two-sided. The token index where the vi-th
+//      voiced word belongs is round(vi*wordToks/voiced). Before reading a word, the
+//      cursor is RE-ANCHORED down onto that diagonal if drift pushed it ahead, and a
+//      word may CONSUME 0 tokens (share the current one) when token-starved -- so the
+//      budget stretches across all words instead of the cursor creeping to the end.
+//      A one-sided "never overshoot" cap is NOT enough: with more words than tokens,
+//      every word still advances >=1 and the cursor walks off the end regardless.
+//   2. TIGHT RESYNC. Window 5 (not 15), and PREFER an exact alpha==nextBase match;
+//      only fall back to the 4-char prefix inside the window. Number expansions
+//      ("fifty-two") still resolve; "the/to/and" can no longer swallow 15 tokens.
+//   3. PROPORTIONAL SPREAD NET. If tokens still run out early, remaining words are
+//      laid down from each word's PROPORTIONAL position across the leftover audio span
+//      (monotonic, 1ms floor) -- two words can never share an instant.
+//
+// Output invariant: exactly one caption per original word, strictly non-decreasing
+// startMs, monotonic, with no large cluster of identical timestamps.
 function buildCaptionsFromKokoroWithText(timestamps, speechText) {
   const clean = speechText.replace(/\[(?:ITEM(?::\d+)?|CLOSE)\]/g, ' ').replace(/\s+/g, ' ').trim();
   const origWords = clean.split(' ').filter(Boolean);
@@ -596,10 +692,19 @@ function buildCaptionsFromKokoroWithText(timestamps, speechText) {
   if (wordToks.length === 0) return [];
 
   const alphaOf = (s) => s.replace(/[^a-zA-Z]/g, '').toLowerCase();
+  const isVoiced = (w) => /[\p{L}\p{N}]/u.test(w);
   // Max tokens one word may span while hunting for the next word's first token.
-  // A long number ("$1,234,567,890.25") expands to ~10 tokens; anything past
-  // this window means the anchor is simply not ahead of us.
-  const RESYNC_WINDOW = 15;
+  // Tight (was 15): a resync is a small re-alignment, not a license to skip ahead.
+  // Number expansions resolve in <=4 tokens; the proportional guard caps the rest.
+  const RESYNC_WINDOW = 5;
+  // How far past the proportional diagonal the cursor may sit. Absorbs a couple of
+  // tokens of slack for number expansions / a dropped punctuation token without ever
+  // letting the cursor run away.
+  const DIAG_SLACK = 3;
+
+  // voicedCount = original words the TTS actually voices. The diagonal is built
+  // against THIS count (pure-punct words consume no token, so they must not skew it).
+  const voicedCount = origWords.reduce((n, w) => n + (isVoiced(w) ? 1 : 0), 0) || 1;
 
   const result = [];
   const push = (wi, startMs, endMs) => result.push({
@@ -609,26 +714,36 @@ function buildCaptionsFromKokoroWithText(timestamps, speechText) {
     timestampMs: (startMs + endMs) / 2,
     confidence: 1,
   });
+  // The proportional diagonal: the token index where the vi-th voiced word should
+  // begin. round() so it tracks both surplus (expansions -> step > 1) and deficit
+  // (more words than tokens -> some words share a token, step 0). This is what keeps
+  // the cursor pinned to the audio instead of racing to either end.
+  const diagTok = (vi) => Math.round(vi * wordToks.length / voicedCount);
+
   let ti = 0;
   let lastEndMs = 0;
+  let voicedSeen = 0; // 0-based index of the voiced word about to be mapped
 
   for (let wi = 0; wi < origWords.length; wi++) {
     // Words the TTS never voices ("-", "—", "..."): consume NO token — a
     // zero-width slot keeps the 1-original-word == 1-caption invariant without
     // shifting the timing of the words that follow. (\p{L}\p{N}: any-script
     // letters count as voiced — Hindi productions must not hit this branch.)
-    if (!/[\p{L}\p{N}]/u.test(origWords[wi])) {
+    if (!isVoiced(origWords[wi])) {
       push(wi, lastEndMs, lastEndMs);
       continue;
     }
 
-    // Timestamps ended before the script did (bad TTS output) — spread the
-    // leftover words across the remaining audio instead of dropping them, so
-    // every original word still gets a caption and downstream slide timing
-    // (computeSegmentDurations) can never collapse.
+    // Tokens ran out before the script did (genuine deficit the diagonal couldn't
+    // absorb). Spread EVERY remaining word from its PROPORTIONAL position across the
+    // leftover audio span, so no two words share an instant and slide timing can't
+    // collapse. A 1ms floor guarantees a strictly increasing tail even if the last
+    // consumed token sat at the audio end.
     if (ti >= wordToks.length) {
       const audioEndMs = wordToks[wordToks.length - 1].end_time * 1000;
-      const step = Math.max(0, audioEndMs - lastEndMs) / (origWords.length - wi);
+      const remaining = origWords.length - wi;
+      const span = Math.max(0, audioEndMs - lastEndMs);
+      const step = remaining > 0 ? Math.max(span / remaining, 1) : 1;
       for (let j = wi; j < origWords.length; j++) {
         const s = lastEndMs + (j - wi) * step;
         push(j, s, s + step);
@@ -636,26 +751,56 @@ function buildCaptionsFromKokoroWithText(timestamps, speechText) {
       break;
     }
 
-    const startMs = wordToks[ti].start_time * 1000;
+    // DIAGONAL RE-ANCHOR (load-bearing, two-sided). Before reading this word's token,
+    // pull the cursor back onto the diagonal if accumulated drift pushed it more than
+    // DIAG_SLACK tokens AHEAD of where this voiced word belongs. This is the piece a
+    // one-sided "max consume" guard lacked: with more words than tokens, every word
+    // still advances >=0, so without an upper re-anchor the cursor creeps to the end
+    // and the tail collapses. Clamped to the diagonal it cannot run away.
+    const startTok = diagTok(voicedSeen);
+    if (ti > startTok + DIAG_SLACK) ti = startTok + DIAG_SLACK;
+    if (ti >= wordToks.length) ti = wordToks.length - 1; // re-anchor stays in range
+
+    const startMs = Math.max(wordToks[ti].start_time * 1000, lastEndMs);
     let endMs = wordToks[ti].end_time * 1000;
     let consume = 1;
 
     // Anchor = the IMMEDIATE next word only. Scanning past a digit/punctuation
     // neighbour for a farther anchor would let "7," swallow "2026"'s expansion.
+    // PREFER an exact alpha match; fall back to a 4-char prefix only if no exact
+    // match sits inside the (tight) window -- so common short words can't false-anchor.
     const nextBase = wi + 1 < origWords.length ? alphaOf(origWords[wi + 1]) : '';
     if (nextBase.length >= 2) {
       const prefix = nextBase.slice(0, Math.min(nextBase.length, 4));
+      let exactK = -1, prefixK = -1;
       for (let k = ti + 1; k < wordToks.length && k - ti <= RESYNC_WINDOW; k++) {
         const tok = alphaOf(wordToks[k].word);
-        if (tok === nextBase || (tok && tok.startsWith(prefix))) {
-          endMs = wordToks[k - 1].end_time * 1000;
-          consume = k - ti;
-          break;
-        }
+        if (tok === nextBase) { exactK = k; break; }
+        if (prefixK < 0 && tok && tok.startsWith(prefix)) prefixK = k;
+      }
+      const k = exactK >= 0 ? exactK : prefixK;
+      if (k >= 0) {
+        endMs = wordToks[k - 1].end_time * 1000;
+        consume = k - ti;
       }
     }
 
+    // CONSUME CLAMP. The next voiced word belongs at diagonal token nextStart; this
+    // word may consume at most up to nextStart + DIAG_SLACK (resync can refine a few
+    // tokens, never race ahead), and at least 0 -- consuming 0 lets a word SHARE the
+    // current token when we're token-starved (deficit), which is exactly how the
+    // budget stretches across all words instead of running out early.
+    const nextStart = diagTok(voicedSeen + 1);
+    const maxTi = Math.min(wordToks.length, nextStart + DIAG_SLACK);
+    if (ti + consume > maxTi) {
+      consume = Math.max(0, maxTi - ti);
+      endMs = consume > 0 ? wordToks[ti + consume - 1].end_time * 1000 : startMs;
+    }
+
     ti += consume;
+    voicedSeen++;
+    // Keep endMs monotonic and never before this word's own start.
+    endMs = Math.max(endMs, startMs, lastEndMs);
     push(wi, startMs, endMs);
     lastEndMs = endMs;
   }
