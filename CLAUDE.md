@@ -37,7 +37,8 @@ GitHub Actions (self-hosted Windows runner)
   → python main.py             # pytoon: renders avatar over a MAGENTA key → avatar.mp4
   → node compose.js            # data-driven ffmpeg composite: background + keyed avatar
   →                           #   + keyed captions + narration + per-scene music/stings
-  → uploads artifact + posts to Telegram
+  → posts the video to Telegram via RAW Bot API (portrait thumb + supports_streaming)
+  → uploads video + cover.png/thumb.png to MinIO; POSTs the callback → n8n WF4 (Publish)
 ```
 
 The avatar is a **keyed overlay layer**, not baked into the background — so pytoon can
@@ -128,20 +129,57 @@ Classic theme (`Production`, `NewsSlideshow`, `CaptionsOverlay`, `scenes/*`) is 
 
 ---
 
-## Slide timing & narration alignment (`build_background.js`)
+## Timeline sync — the absolute-frame model (`build_background.js`)
 
-The whole show rides one narration (`speech.mp3` + Kokoro `captions.json`):
+**The most load-bearing thing in the renderer. Read this before touching timing.**
+
+The audio and the visuals share **one absolute-frame timeline anchored to the Kokoro
+caption word-timestamps** — the same timestamps the on-screen captions use, so there is
+a **single source of truth** and the two can't drift. (This replaced the old
+"duration + transition-bonus" model, where audio and visual timelines were computed
+independently and drifted worst at the end — the sign-off audio playing over the wrong
+scene.)
 
 1. Captions are built **first** (`buildCaptionsFromKokoroWithText`) — one entry per
-   original word, number-expansion-aware.
-2. `computeSegmentDurations` reads each `[ITEM:N]` segment's first word straight from
-   that captions array → exact start times. **This is what keeps each story slide on
-   screen exactly while James talks about it** (no drift from "2026" → "twenty twenty-six").
-3. Newshound narration **starts at the Headlines scene** (intro teases the rundown);
-   the offset is set so story-1's narration lands on the Stories-scene start. `compose.js`
-   delays the avatar/captions/audio by `narrationStartSec` and bounds them to the
-   narration window (so pytoon's ~2s over-run doesn't bleed into Closing).
+   original word, number-expansion-aware (see "caption matching" below).
+2. `computeSegmentStartSecs` reads each `[ITEM:N]` segment's first word straight from
+   that captions array → exact per-story start times (with a monotonic safety net).
+3. `computeTimeline()` lays **every scene** as a contiguous, non-overlapping window
+   `[startFrame, endFrame)` on the final video timeline: each story/closing start =
+   `round((narrationStart + segmentFirstWordSec) * fps)`. The **Closing absorbs all
+   residual slack** so the video can never under-run the audio.
+4. **Transitions are OVERLAYS, not timeline-consumers.** `ShowLayout.tsx` renders each
+   scene as a plain `<Sequence from=… durationInFrames=…/>` at those exact frames (no
+   `TransitionSeries`, nothing eating boundary frames); the stinger wipes / section
+   cards / scene flashes are drawn *on top of* the hard cuts. This is why a transition
+   can never desync the rest of the show.
+5. Narration **starts at the Headlines scene** (the intro teases the rundown). The
+   offset (`narrationStartSec`, plus the `hookOverlapSec` knob in `production.json`,
+   currently 0 = the ~2s opening sting plays out first) is set so story-1's narration
+   lands on the Stories-scene start. `compose.js` delays the avatar/captions/audio by
+   `narrationStartSec` and bounds them to the narration window (so pytoon's ~2s over-run
+   doesn't bleed into Closing).
 
+### Build-time SYNC ASSERTION (fails the Action on drift) — intentional fail-loud
+
+`assertTimelineSync()` **throws** (failing the GitHub Action) on any timeline drift or
+collapse, and prints a **SYNC REPORT table** in the Action log so every render *proves*
+sync instead of us eyeballing it. A failed build here is the assertion doing its job —
+it is NOT a flaky build. It checks two independent kinds of thing:
+
+- **Contiguity / anchoring** (±2 frames): scenes are contiguous, each anchored to its
+  audio, the stories-block starts at `narrationStart + intro`, total ≥ narration end.
+- **Non-circular geometry guards (5a–5d)** — frame geometry + word counts only, *not*
+  the caption lookup, so a collapse can't pass: every story scene ≥ `MIN_STORY_LEN_FRAMES`,
+  consecutive starts ≥ `MIN_STORY_GAP_FRAMES` apart and increasing, the last story starts
+  before `narrationEnd − its min length`, and each story's allotted seconds is within
+  `STORY_SHARE_FACTOR` (6×) of its word-count share. **This non-circularity was a real
+  bug fix:** the original assertion compared scene starts against an audio anchor *derived
+  from the same caption→segment mapping*, so it printed "SYNC OK" even on a fully collapsed
+  timeline. (`.test/` carries the regression fixture + a proof that the new assertion
+  catches the old collapse.)
+
+The **classic** theme keeps the legacy duration path (no timeline, no assertion).
 Fallback (no captions.json): proportional word-count allocation.
 
 ---
@@ -156,21 +194,114 @@ Fallback (no captions.json): proportional word-count allocation.
 
 ---
 
-## Caption alignment edge cases (`build_background.js → buildCaptionsFromKokoroWithText`)
+## Caption word→token matching — the KNOWN FRAGILITY (`buildCaptionsFromKokoroWithText`)
 
-Kokoro expands numbers into multiple tokens ("2026" → "twenty twenty-six") and voices **no token at all** for pure-punctuation words (the spunky scripts' standalone "-" aside markers). Mapping rules (one caption per original word, always):
-- **Pure-punctuation words** ("-", "—", "..."): consume no token — zero-width caption (Unicode letters count as voiced, so Hindi words never hit this branch).
-- **Every other word**: if the *immediate* next word has ≥2 alphabetic chars, scan a **bounded window (15 tokens)** for its first token and span everything before it — this covers number expansions and re-syncs any drift. No match in the window → consume exactly **one** token. The bound is load-bearing: an unbounded scan once swallowed every remaining token after "18" (next word's tokens were already behind the cursor after a "-" drift), freezing captions and collapsing all later scenes (2026-06-11 us-AM edition). Anchor is the immediate next word only — scanning past digit neighbours would let "7," swallow "2026"'s expansion.
-- **Tokens exhausted early**: remaining words are spread across the leftover audio span.
+This is the one genuinely fragile layer in the renderer, and everything above (timeline,
+slide timing, the audio mix) keys off it. **The permanent fix is the Chatterbox +
+whisperX per-story TTS migration** (see below), which gives exact per-story boundaries +
+real word timestamps and **deletes this whole matching layer.** Until then:
 
-`computeSegmentDurations` additionally redistributes + monotonic-clamps degenerate segment starts (safety net), so slide timing can never collapse into minimum-length slides + a frozen closing.
+**Why it's hard:** the script has more *words* than Kokoro emits *tokens* — Kokoro voices
+no token at all for pure-punctuation words (the spunky scripts' standalone "-"/"—" aside
+markers) and *expands* numbers into several tokens ("2026" → "twenty twenty-six"). So
+there is no 1:1 mapping; the matcher has to keep the script's words and Kokoro's tokens
+aligned as it walks both. On long scripts a naive matcher **drifts** — and a drift that
+runs the cursor off the end of the token stream collapses every later scene onto one
+instant (stories flash past, captions freeze, audio desyncs). This has bitten us twice
+(us-AM 2026-06-11; a 222-word/206-token edition).
+
+**Current mitigations (one caption per original word, always):**
+- **Stay on the proportional diagonal.** `diagTok(vi) = round(vi * wordToks / voicedCount)`
+  is the token index each voiced word *should* sit at. The matcher RE-ANCHORS the cursor
+  back onto the diagonal when drift pushes it past `DIAG_SLACK` ahead, and lets a word
+  CONSUME 0 tokens (share the current one) when token-starved. A one-sided "never
+  overshoot" cap is **insufficient** — with more words than tokens every word still
+  advances ≥1 and the cursor walks off the end regardless. This two-sided guard is the
+  load-bearing change.
+- **Pure-punctuation words** consume no token (zero-width caption; Unicode letters count
+  as voiced, so Hindi words never hit this branch).
+- **Tight resync:** a small bounded window (`RESYNC_WINDOW` 5) prefers an *exact* alpha
+  match and only falls back to a short prefix match — so common short next-words
+  ("the"/"to"/"and") can no longer false-anchor and swallow a dozen tokens at once.
+- **Deficit tail:** if tokens genuinely run out, the remaining words are spread across the
+  leftover audio with a strictly-increasing floor (never a shared instant).
+
+The **non-circular build SYNC ASSERTION** (above) is the backstop: any residual collapse
+**fails the Action** rather than shipping. The *small* residual drift on long scripts
+(up to ~1-2s on later stories) is watchable now and only fully disappears with the
+migration. **Do not "fix" this matcher by widening the window** — that's exactly what
+caused the collapses; the real fix is to stop matching at all (Chatterbox+whisperX).
+
+### The permanent fix — Chatterbox + whisperX per-story TTS (planned, gated on the GPU box)
+
+Replacing Kokoro with **per-story Chatterbox TTS** (expressive — emotion via
+`exaggeration`) + **whisperX** word timestamps removes the heuristic entirely: each story
+is synthesized separately, so story boundaries are exact and word timestamps are real.
+A shim mimics Kokoro's `{audio, timestamps}` response so n8n + the renderer barely change,
+and `buildCaptionsFromKokoroWithText` / the diagonal matcher get **deleted**. This also
+fixes the flat Kokoro audio. Gated on the 5070 Ti box (see root `PENDING.md`).
+
+---
+
+## Per-scene audio engine (`compose.js`)
+
+The final ffmpeg composite builds a **per-scene music mix** from the scene timeline in
+`composite.json` (NOT one looped bed): the opening logo sting, a rundown bed under
+Headlines, an **emotion-matched bed per story** (`storybed_<emotion>_N`), transition
+stingers at story cuts, and an outro bed + sign-off sting under Closing. Variants rotate
+per run via `audioSeed`. (The classic theme falls back to a single looped bed.)
+
+**Mix levels are data, not code** — they live in
+`productions/daily-news/production.json` → the **`audio`** block (`openingSting`, `beds`,
+`storyStingers`, `closingBed`, `signOff`). `compose.js → loadAudioLevels()` reads the
+block (with identical built-in defaults if it's absent), so tuning a level needs only
+`node compose.js` to re-mix — **no Remotion re-render**. The mix is ffmpeg-4.x-safe
+(the runner has ffmpeg 4.x: `amix` uses `1/n` + a `volume` boost, since `normalize=0`
+needs ffmpeg ≥5). The opening sting is duck-free but level-tuned (LogoSting1 is mastered
+near 0 dBFS, so it sits at 0.75 to avoid clipping the master against the narration hook).
+
+## Story chyron & section stingers (newshound theme)
+
+- **Dynamic story chyron** (`themes/newshound/Story` + `Sections`): a small plate shows
+  the **topic** (`teaser`, black) ` // ` **one-liner** (`take`, orange); the big white
+  text is the **actual news headline** (`title`, 3-line clamp) overlapping the photo.
+  One cyan category/section badge (the duplicate `SectionBadge` was removed). Falls back
+  to the raw title when `take` is absent.
+- **Two visually distinct transitions** (both overlays, zero timeline impact):
+  - **yellow `StingerWipeOverlay`** on every *story → story* cut;
+  - a **blue `SectionStingerOverlay` + blue `SectionCard`** (NEXT UP / SPORTS / THE FUN
+    STUFF, Anton) on *section-boundary* cuts (top → sports → fun). `ShowLayout` picks
+    blue when `sectionOf(prev) !== sectionOf(next)`. Non-top stories also wear a small
+    persistent section badge. See `TEMPLATE.md` → "Sections — the 5+3+2 show".
+
+## Telegram video post — RAW Bot API on the runner (NOT n8n)
+
+The 9:16 video is provably 1080×1920 SAR 1:1, but Telegram's inline player **squishes
+vertical video** unless it gets a portrait thumbnail + `supports_streaming` + explicit
+width/height. The n8n Telegram node and `xireiki` send none of these, so both squished
+identically. **The video is therefore posted from the GitHub Action (`.github/workflows/
+main.yml`) via the raw Telegram Bot API** with a 9:16 thumbnail + `supports_streaming`.
+The n8n video post was removed from WF4 (it now posts only the cover + future channels);
+`xireiki` is legacy-only. Don't re-add a video post in n8n.
+
+## Cover / thumbnail (on the runner → MinIO)
+
+The per-post cover is generated **on the runner**, not by the VPS thumbnail service —
+the n8n host can't reach that service (egress restricted to standard ports), and the
+runner already has the manifest + a built video. `cover/` is a PIL generator
+(`make_cover.py` reads `manifest.json` → writes `cover.png` 1080×1920 + `thumb.png`
+1280×720 from story 1's image/take/emotion + the edition date). The hook text uses
+DeepInfra when `DEEPINFRA_API_KEY`/`DEEPINFRA_KEY` is set, else a graceful local fallback
+(trimmed take); it never fails the build. `main.yml` uploads `cover.png`/`thumb.png` to
+MinIO next to the video (`covers/NAME.png`, `thumbs/NAME.png`); n8n WF4 S3-downloads the
+cover and posts it.
 
 ---
 
 ## Known constraints
 
 - Runner is **self-hosted Windows** — PowerShell used for base64 decoding, paths use backslashes in some places
-- n8n changes must be made **manually** in the live n8n UI — the workflow has credential associations that make MCP updates risky
+- n8n v2 workflows are edited **via the SDK/MCP** (`update_workflow`), and credential pins (`{id,name}` in the `.sdk.js` CREDS maps) survive the update — never re-attach in the UI. ⚠️ But an **active** workflow runs its *published* version: after `update_workflow` you must `publish_workflow` for the change to go live (see `n8n/README.md`)
 - `forcealign` requires NLTK corpus download on first run (handled in workflow)
 - Remotion Chrome Headless Shell is cached in GitHub Actions to avoid re-downloading (~300MB)
 - pytoon is CPU-only by design; no GPU alternatives exist that are open-source + end-to-end for cartoon characters

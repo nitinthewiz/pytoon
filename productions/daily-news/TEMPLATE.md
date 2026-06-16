@@ -113,9 +113,12 @@ Sections are **purely visual** — the narration is one continuous track, so a
 section break must never add a scene (it would desync every later slide). Instead
 (`remotion/src/themes/newshound/Sections.tsx`, used by the `newshound-fb` show):
 - the **first story of a new section** gets a full-frame branded **divider card**
-  overlayed on its first ~35 frames (StingerWipe aesthetic, "SPORTS" / "THE FUN
-  STUFF" in Anton) that sweeps off to reveal the story already running beneath —
-  **zero timeline impact**;
+  overlayed on its first ~35 frames ("NEXT UP / SPORTS" / "THE FUN STUFF" in Anton)
+  that sweeps off to reveal the story already running beneath — **zero timeline
+  impact**. The section cut is rendered in a distinct **BLUE** tone — a blue
+  `SectionStingerOverlay` band + blue `SectionCard` — so it reads clearly differently
+  from the **yellow** `StingerWipeOverlay` used on ordinary story → story cuts.
+  `ShowLayout` picks blue whenever `sectionOf(prev) !== sectionOf(next)`;
 - non-top stories wear a small persistent **section badge** (SPORTS / FUN) under
   the category bug;
 - the rundown lists only the **top-section teasers** (max 5) plus one static
@@ -155,6 +158,9 @@ The n8n `IndiaNews-Hindi` workflow is the first real variant candidate.
 
 ## Open items
 
-- `take` chyron currently falls back to the raw news title — the script/prompt work
-  will feed James's actual *take* per story.
-- Production-folder selection is hard-coded; add a `template` dispatch input.
+- Production-folder selection is hard-coded to `daily-news`; add a `template` dispatch
+  input when the second production (e.g. India/Hindi) goes live.
+
+> Done since the first draft: the story chyron now shows the writer's real *take*
+> (topic // one-liner + the actual headline), not the raw title; the `audio` mix block
+> and the 5+3+2 `section` format (with the blue section stinger) are live.
