@@ -407,6 +407,37 @@ async function main() {
     // Map the LLM's visual beats; fill the 'photo' beat's src with the local image below.
     const rawVisuals = visualsArr && visualsArr[i];
 
+    // MULTI-IMAGE per story (FLUX stills). The runner fetched each newsItem.imageKeys[k] to a
+    // local file images/<clampedIdx>_<k>.png BEFORE this script ran (main.yml, same delivery
+    // path as the audio — NO network fetch here). clampedIdx (the manifest-news index) is the
+    // SAME index main.yml named the files by; the loop index i can differ under [ITEM:N]
+    // reorder, so we resolve stills by clampedIdx. Keep only the k's whose file actually
+    // exists, cap at 5 (the StoryBeats slot is subdivided internally, so this can never
+    // desync — `durationInFrames` and the outer timeline are untouched).
+    const stillNames = [];
+    if (Array.isArray(newsItem.imageKeys) && newsItem.imageKeys.length) {
+      for (let k = 0; k < newsItem.imageKeys.length && stillNames.length < 5; k++) {
+        const stillName = `images/${clampedIdx}_${k}.png`;
+        if (fs.existsSync(path.join(IMAGE_DIR, `${clampedIdx}_${k}.png`))) stillNames.push(stillName);
+      }
+    }
+
+    // When we have FLUX stills, they ARE the story's photo beats (4-5 quick cuts). We then
+    // append any picker-supplied NON-photo beats (number/quote/flagclash/graphic/...) after
+    // them, dropping the picker's single placeholder photo (the stills replace it). The first
+    // still is the story's imagePath (also feeds the intro teaser + Ken Burns fallbacks).
+    if (stillNames.length) {
+      const nonPhoto = (rawVisuals || []).filter(v => v.type !== 'photo' && v.type !== 'stepmotion');
+      const visuals = [
+        ...stillNames.map(src => ({ type: 'photo', src })),
+        ...nonPhoto,
+      ];
+      console.log(`Story ${i + 1}/${count}: ${stillNames.length} FLUX still(s) + ${nonPhoto.length} picker beat(s)`);
+      items.push({ imagePath: stillNames[0], durationInFrames, ...storyMeta, visuals });
+      continue;
+    }
+
+    // No FLUX stills → fall back to the single MediaStack image, EXACTLY as today.
     if (!newsItem.image) {
       items.push({ imagePath: null, durationInFrames, ...storyMeta });
       continue;

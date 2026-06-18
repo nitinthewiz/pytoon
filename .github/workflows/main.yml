@@ -100,6 +100,42 @@ jobs:
       run: npx remotion browser ensure
       working-directory: remotion
 
+    # ---- Fetch per-story FLUX stills from MinIO (multi-image per story) ----
+    # n8n generated N editorial stills per story and uploaded each to MinIO by KEY
+    # (manifest.news[i].imageKeys[k]); there is no public MinIO base, so we deliver them
+    # the SAME way as the audio — `mc get` to a local file before render. Local naming is
+    # images/<i>_<k>.png (i = 0-based story index, k = still index), which build_background.js
+    # reads via fs.existsSync. Best-effort + guarded: a missing/failed still NEVER fails the
+    # render (the story falls back to its single MediaStack image, exactly as today). Needs
+    # the MinIO alias, so it runs only when audio came from MinIO (alias 'myminio' is set).
+    - name: Fetch story stills from MinIO
+      if: ${{ inputs.manifest_b64 != '' && !startsWith(inputs.audio_input, 'speech.mp3') }}
+      continue-on-error: true
+      shell: pwsh
+      run: |
+        $imgDir = Join-Path $PWD 'remotion\public\images'
+        New-Item -ItemType Directory -Force -Path $imgDir | Out-Null
+        try {
+          $m = Get-Content 'manifest.json' -Raw | ConvertFrom-Json
+        } catch { Write-Host "No/!invalid manifest.json - skipping still fetch"; exit 0 }
+        $news = $m.news
+        if (-not $news) { Write-Host "manifest.news empty - skipping still fetch"; exit 0 }
+        $got = 0; $miss = 0
+        for ($i = 0; $i -lt $news.Count; $i++) {
+          $keys = $news[$i].imageKeys
+          if (-not $keys) { continue }
+          for ($k = 0; $k -lt $keys.Count; $k++) {
+            $key = $keys[$k]
+            if (-not $key) { continue }
+            $dest = Join-Path $imgDir ("{0}_{1}.png" -f $i, $k)
+            # Per-still try/guard: a single failed get must never fail the whole step.
+            & "${{ secrets.MINIO_MC_PATH }}\mc" get "myminio/${{ secrets.MINIO_BUCKET_NAME }}/$key" "$dest" --insecure
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $dest)) { $got++ }
+            else { $miss++; Write-Host "  still get failed (non-fatal): $key" }
+          }
+        }
+        Write-Host "Story stills fetched: $got ok, $miss missing"
+
     - name: Build background video
       if: ${{ inputs.manifest_b64 != '' }}
       run: node build_background.js

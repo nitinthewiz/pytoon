@@ -29,6 +29,11 @@ export type NewsItem = {
   // Absent = 'top'. Purely visual (divider card + badge) — never affects timing.
   section?: string;
   visuals?: Visual[]; // multi-beat enrichment; falls back to a single photo beat
+  // Per-story FLUX editorial stills, delivered by MinIO KEY (the runner mc-gets each to a
+  // local images/<i>_<k>.png before render — same delivery path as the audio). When present
+  // and the local files exist, build_background.js builds 4-5 photo beats from them; absent or
+  // missing => the single MediaStack `imagePath` photo (today's behaviour). NEVER affects timing.
+  imageKeys?: string[];
   teaserImages?: string[]; // intro slide: paths to all story images for the hook teaser
   // OPTIONAL editorial full-bleed art (IMAGE_SPEC v2). When set, StoryFullBleed renders it
   // as a cover-fit base layer behind the story zone. Absent => the layout is byte-identical
