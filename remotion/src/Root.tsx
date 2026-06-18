@@ -22,6 +22,8 @@ import { Closing as NHClosing } from './themes/newshound/Closing';
 import { type CompositionProps as Props } from './types';
 import { CANVAS_W, CANVAS_H, FPS } from './production';
 import { TRANSITION_FRAMES } from './layout';
+// Graphic catalog (platform-v1 visual-component-library)
+import { Catalog, CatalogStill, CATALOG_W, catalogHeight, type CatalogProps } from './catalog/Catalog';
 
 const DEFAULT_PROPS: Props = {
   items: [{ imagePath: 'images/placeholder.jpg', durationInFrames: 90, title: 'Sample headline' }],
@@ -46,6 +48,28 @@ const SAMPLE_ITEM = { imagePath: 'images/0.jpg', durationInFrames: 120, title: '
 export const Root: React.FC = () => {
   return (
     <>
+      {/* === Graphic catalog (review surface; presentation-only, never touches timeline) === */}
+      <Composition
+        id="Catalog"
+        component={Catalog}
+        durationInFrames={90}
+        fps={FPS}
+        width={CATALOG_W}
+        height={catalogHeight()}
+        defaultProps={{ theme: 'james' } as CatalogProps}
+        calculateMetadata={async ({ props }) => ({ height: catalogHeight(props.filterKind, props.filterTag) })}
+      />
+      <Composition
+        id="CatalogStill"
+        component={CatalogStill}
+        durationInFrames={1}
+        fps={FPS}
+        width={CATALOG_W}
+        height={catalogHeight()}
+        defaultProps={{ theme: 'james' } as CatalogProps}
+        calculateMetadata={async ({ props }) => ({ height: catalogHeight(props.filterKind, props.filterTag) })}
+      />
+
       {/* === Newshound theme (active) === */}
       <Composition id="NewshoundShow" component={NewshoundShow} durationInFrames={300} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={DEFAULT_PROPS} calculateMetadata={async ({ props }) => ({ durationInFrames: showDurationFrames(props.items, props.closingFrames, props.timeline) })} />
       <Composition id="NewshoundShowFB" component={NewshoundShowFB} durationInFrames={300} fps={FPS} width={CANVAS_W} height={CANVAS_H} defaultProps={DEFAULT_PROPS} calculateMetadata={async ({ props }) => ({ durationInFrames: showDurationFrames(props.items, props.closingFrames, props.timeline) })} />

@@ -1,0 +1,29 @@
+{
+  "id": "james",
+  "palette": {
+    "hero": "#FFC01E",
+    "heroInk": "#241710",
+    "secondary": "#E26A0F",
+    "accent": "#19C3E6",
+    "alert": "#FF3B30",
+    "bg": "#14181F",
+    "bg2": "#1C212B",
+    "fg": "#FFFFFF"
+  },
+  "fonts": { "display": "Anton", "body": "Inter", "displayWeight": 400, "bodyWeight": 700 },
+  "motion": {
+    "energy": 1.0,
+    "beatTransitionFrames": 13,
+    "kenBurnsAmplitude": 1.0,
+    "cornerRadius": 18,
+    "strokeWeight": 8
+  },
+  "emotionEnergy": {
+    "happy": 1.4,
+    "angry": 1.4,
+    "rhetorical": 1.25,
+    "explain": 1.05,
+    "confused": 1.05,
+    "sad": 0.7
+  }
+}

@@ -1,12 +1,16 @@
 import { type Caption } from '@remotion/captions';
 
 // A single visual "beat" within a story (see VISUAL_ENRICHMENT.md).
+// `graphic` is the registry seam (MOTION_GRAPHICS_SPEC §self-generating): one member for
+// the whole brand-agnostic graphics library — StoryBeats looks up GRAPHICS[kind],
+// zod-validates `data`, and renders the Comp inside <GraphicShell> (else a FallbackCard).
 export type Visual =
   | { type: 'photo'; src: string }
   | { type: 'entity'; src: string; label?: string }
   | { type: 'flagclash'; a: string; b: string; mode?: 'cooperate' | 'clash'; labelA?: string; labelB?: string }
   | { type: 'number'; value: string; label?: string }
-  | { type: 'quote'; text: string; source?: string };
+  | { type: 'quote'; text: string; source?: string }
+  | { type: 'graphic'; kind: string; data: any };
 
 export type NewsItem = {
   imagePath: string | null;
