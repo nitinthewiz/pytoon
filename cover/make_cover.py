@@ -102,11 +102,20 @@ def main():
     take = take[0] if take else ""
     emotion = (manifest.get("emotions") or ["explain"])
     emotion = emotion[0] if emotion else "explain"
-    date = (manifest.get("edition") or {}).get("date", "") or ""
+    ed = manifest.get("edition") or {}
+    date = ed.get("date", "") or ""
+    # Edition label for the cover, e.g. "US AM Edition". Country + edition come from
+    # the manifest's edition block; degrade gracefully if either is missing.
+    country = (ed.get("country") or "").strip()
+    edition_code = (ed.get("edition") or "").strip()
+    edition_label = " ".join(p for p in (country, edition_code) if p)
+    if edition_label:
+        edition_label += " Edition"
 
     hook = _hook_from_take(take)
     pose = EMOTION_POSE.get(emotion, "confident.png")
-    print(f"[make_cover] story-1 emotion={emotion!r} pose={pose} date={date!r} hook={hook!r}")
+    print(f"[make_cover] story-1 emotion={emotion!r} pose={pose} date={date!r} "
+          f"edition={edition_label!r} hook={hook!r}")
     print(f"[make_cover] image={'<none>' if not image else image[:80]}")
 
     # 2) Background: load_image already falls back to a brand-ink canvas on any
@@ -124,14 +133,14 @@ def main():
     # 3) Compose. Each side is independent so a failure in one still ships the other.
     ok = False
     try:
-        make_cover(bg, hook, pose, date, REPO_ROOT)
+        make_cover(bg, hook, pose, date, REPO_ROOT, edition=edition_label)
         os.replace(os.path.join(REPO_ROOT, GEN_COVER), os.path.join(REPO_ROOT, OUT_COVER))
         print(f"[make_cover] wrote {OUT_COVER} (1080x1920)")
         ok = True
     except Exception as e:
         print(f"[make_cover] cover render failed ({e!r})")
     try:
-        make_thumb(bg, hook, pose, REPO_ROOT)
+        make_thumb(bg, hook, pose, REPO_ROOT, edition=edition_label, date=date)
         os.replace(os.path.join(REPO_ROOT, GEN_THUMB), os.path.join(REPO_ROOT, OUT_THUMB))
         print(f"[make_cover] wrote {OUT_THUMB} (1280x720)")
         ok = True
