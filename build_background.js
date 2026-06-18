@@ -386,6 +386,24 @@ async function main() {
       teaser: (teasers && teasers[i]) || undefined,
       ...(section ? { section } : {}),
     };
+
+    // IMAGE_SPEC v2 — OPTIONAL editorial full-bleed art (the FLUX.2-generated illustration).
+    // Download newsItem.backgroundImage to images/bg_{i} and stamp storyMeta.backgroundImagePath
+    // so it propagates via every ...storyMeta push below. Best-effort: a failure (or absence)
+    // leaves the field unset and the render behaves exactly as today — never blocks a show.
+    if (newsItem.backgroundImage) {
+      const bgExt = detectExtension(newsItem.backgroundImage);
+      const bgLocalName = `images/bg_${i}${bgExt}`;
+      const bgLocalPath = path.join(IMAGE_DIR, `bg_${i}${bgExt}`);
+      try {
+        console.log(`Downloading background art ${i + 1}/${count}: ${newsItem.backgroundImage}`);
+        await downloadImage(newsItem.backgroundImage, bgLocalPath);
+        storyMeta.backgroundImagePath = bgLocalName;
+      } catch (err) {
+        console.warn(`  Failed to download background art ${i}: ${err.message} — skipping (no v2 backdrop)`);
+      }
+    }
+
     // Map the LLM's visual beats; fill the 'photo' beat's src with the local image below.
     const rawVisuals = visualsArr && visualsArr[i];
 

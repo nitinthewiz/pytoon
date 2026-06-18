@@ -29,6 +29,13 @@ import { MapLocatorCatalog } from './MapLocator.catalog';
 import { BeforeAfterCatalog } from './BeforeAfter.catalog';
 import { MarketTickerCatalog } from './MarketTicker.catalog';
 
+// The generic self-generating primitive. NOT a library `kind` — it is the {type:'layout';
+// spec} Visual member, so it lives in REGISTRY (for the Catalog grid + the auto-generated
+// CONFIG-step LLM prompt) but is deliberately EXCLUDED from the GRAPHICS kind→Comp map
+// below (the picker must never select it through the {type:'graphic'} path — its props are
+// {spec}, not a library data shape). The renderer reaches it via its own 'layout' case.
+import { LayoutBeatCatalog } from './LayoutBeat.catalog';
+
 // The full registry array. Append each block's catalog here once its import is uncommented.
 const CATALOGS: CatalogEntry[] = [
   NumberCardCatalog,
@@ -45,6 +52,7 @@ const CATALOGS: CatalogEntry[] = [
   MapLocatorCatalog,
   BeforeAfterCatalog,
   MarketTickerCatalog,
+  LayoutBeatCatalog,
 ];
 
 // View 1 — the catalog array (Catalog composition + Airtable mirror consume this).
@@ -52,8 +60,12 @@ export const REGISTRY: CatalogEntry[] = CATALOGS;
 
 // View 2 — the renderer map: kind → { Comp, schema }. StoryBeats' 'graphic' case looks up
 // GRAPHICS[kind], zod-validates data against schema, renders Comp (else a FallbackCard).
+// LayoutBeat is EXCLUDED: it is the {type:'layout'; spec} member, not a {type:'graphic'}
+// kind — including it here would let the picker route a story to it with the wrong props.
 export const GRAPHICS: Record<string, { Comp: CatalogEntry['Comp']; schema: CatalogEntry['schema'] }> =
-  Object.fromEntries(CATALOGS.map((e) => [e.kind, { Comp: e.Comp, schema: e.schema }]));
+  Object.fromEntries(
+    CATALOGS.filter((e) => e.kind !== 'LayoutBeat').map((e) => [e.kind, { Comp: e.Comp, schema: e.schema }]),
+  );
 
 // Convenience lookups for the Catalog composition's filters.
 export const byKind = (kind: string): CatalogEntry | undefined =>

@@ -12,6 +12,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { motionForBeat, kenBurnsTransform, transitionFor } from '../../graphics/motion';
 import { GraphicShell } from '../../graphics/GraphicShell';
 import { GRAPHICS } from '../../graphics/registry';
+import { LayoutBeat } from '../../graphics/LayoutBeat';
 
 // One photo beat — Ken Burns from the 6-preset MOTION table (cycled per beat so adjacent
 // beats never match), resolved over the beat's SLOT length (passed in, not raw frame), so
@@ -94,6 +95,9 @@ const Beat: React.FC<{ v: Visual; fxSeed: number; beatIndex: number; slotFrames:
     case 'entity': return <EntityBeat src={v.src} label={v.label} />;
     case 'quote': return <QuoteBeat text={v.text} source={v.source} />;
     case 'graphic': return <GraphicBeat kind={v.kind} data={v.data} />;
+    // The generic self-generating primitive — LayoutBeat zod-validates v.spec internally
+    // and renders a FallbackCard on any invalid spec, so this can never throw.
+    case 'layout': return <LayoutBeat spec={v.spec} />;
     case 'photo':
     default: return <PhotoBeat src={(v as any).src} fxSeed={fxSeed} beatIndex={beatIndex} slotFrames={slotFrames} />;
   }

@@ -10,7 +10,12 @@ export type Visual =
   | { type: 'flagclash'; a: string; b: string; mode?: 'cooperate' | 'clash'; labelA?: string; labelB?: string }
   | { type: 'number'; value: string; label?: string }
   | { type: 'quote'; text: string; source?: string }
-  | { type: 'graphic'; kind: string; data: any };
+  | { type: 'graphic'; kind: string; data: any }
+  // The generic self-generating primitive (MOTION_GRAPHICS_SPEC §self-generating (2)): a
+  // FLAT node list the LLM fills when no library block fits. `spec` is validated by
+  // LayoutSpecSchema inside <LayoutBeat> (invalid → FallbackCard) — kept `any` here so a
+  // bad spec is a render-time degrade, never a build-time type error.
+  | { type: 'layout'; spec: any };
 
 export type NewsItem = {
   imagePath: string | null;
@@ -25,6 +30,10 @@ export type NewsItem = {
   section?: string;
   visuals?: Visual[]; // multi-beat enrichment; falls back to a single photo beat
   teaserImages?: string[]; // intro slide: paths to all story images for the hook teaser
+  // OPTIONAL editorial full-bleed art (IMAGE_SPEC v2). When set, StoryFullBleed renders it
+  // as a cover-fit base layer behind the story zone. Absent => the layout is byte-identical
+  // to today (fully backward-compatible). Set by build_background.js from newsItem.backgroundImage.
+  backgroundImagePath?: string;
 };
 
 // Absolute-frame scene timeline (THE single source of truth, computed in

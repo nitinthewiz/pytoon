@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Img, staticFile, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { ANTON, INTER } from '../../fonts';
 import { NH } from '../newshound';
 import { BOTTOM_BAR_H } from '../../layout';
@@ -36,10 +36,36 @@ export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ti
   const catIn = spring({ frame: frame - 8, fps, config: { damping: 13 } });
   const sweep = interpolate(spring({ frame: frame - 12, fps, config: { damping: 18 } }), [0, 1], [0, 100]);
 
+  // IMAGE_SPEC v2 — OPTIONAL editorial full-bleed art. When `backgroundImagePath` is set we
+  // render it as a slow Ken-Burns cover-fit BASE layer across the whole canvas, and make the
+  // otherwise-opaque header / zone / bottom bars TRANSLUCENT (with gradient scrims kept for
+  // legibility) so the art is actually visible behind them. Absent => every bar stays fully
+  // opaque charcoal and the layout is byte-identical to today (backward-compatible).
+  const bgArt = item.backgroundImagePath;
+  // a gentle drift so the static art reads as alive (resolves over a fixed long window).
+  const artScale = interpolate(frame, [0, item.durationInFrames || 150], [1.08, 1.16], { extrapolateRight: 'clamp' });
+  const artY = interpolate(frame, [0, item.durationInFrames || 150], [-1.5, 1.5], { extrapolateRight: 'clamp' });
+  // bar fills: opaque charcoal normally, translucent over the art so it shows through.
+  const headerBg = bgArt ? 'rgba(20,24,31,0.55)' : NH.charcoal;
+  const zoneBg = bgArt ? 'rgba(28,33,43,0.30)' : NH.charcoal2;
+  const bottomBg = bgArt ? 'rgba(20,24,31,0.55)' : NH.charcoal;
+
   return (
     <AbsoluteFill style={{ background: NH.charcoal }}>
+      {/* ---- EDITORIAL ART base layer (v2, optional) ---- */}
+      {bgArt && (
+        <AbsoluteFill style={{ overflow: 'hidden', background: NH.charcoal }}>
+          <Img
+            src={staticFile(bgArt)}
+            style={{ position: 'absolute', width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${artScale}) translateY(${artY}%)` }}
+          />
+          {/* a soft top-to-bottom scrim so headline + James never fight the art */}
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(20,24,31,0.5) 0%, rgba(20,24,31,0.15) 35%, rgba(20,24,31,0.35) 70%, rgba(20,24,31,0.85) 100%)' }} />
+        </AbsoluteFill>
+      )}
+
       {/* ---- IMAGE / BEAT zone (middle) ---- */}
-      <div style={{ position: 'absolute', top: IMG_TOP, left: 0, right: 0, height: IMG_BOTTOM - IMG_TOP, overflow: 'hidden', background: NH.charcoal2 }}>
+      <div style={{ position: 'absolute', top: IMG_TOP, left: 0, right: 0, height: IMG_BOTTOM - IMG_TOP, overflow: 'hidden', background: zoneBg }}>
         <StoryBeats item={item} durationInFrames={item.durationInFrames} fxSeed={index} />
         {/* top darkening so the chyron's 3rd line stays legible over the image */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 200, background: 'linear-gradient(180deg, rgba(20,24,31,0.92) 0%, rgba(20,24,31,0) 100%)' }} />
@@ -48,7 +74,7 @@ export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ti
       </div>
 
       {/* ---- HEADER (top): counter + category + the TAKE ---- */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: HEADER_H, background: NH.charcoal }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: HEADER_H, background: headerBg }} />
       <div style={{ position: 'absolute', top: 14, left: 16, right: 16, display: 'flex', gap: 6 }}>
         {Array.from({ length: total }).map((_, i) => (
           <div key={i} style={{ flex: 1, height: 7, borderRadius: 4, overflow: 'hidden', background: 'rgba(255,255,255,0.22)' }}>
@@ -75,7 +101,7 @@ export const StoryFullBleed: React.FC<Props> = ({ item, index = 0, total = 1, ti
       </div>
 
       {/* bottom charcoal zone (James composited here by compose.js) */}
-      <div style={{ position: 'absolute', top: IMG_BOTTOM, left: 0, right: 0, bottom: 0, background: NH.charcoal }} />
+      <div style={{ position: 'absolute', top: IMG_BOTTOM, left: 0, right: 0, bottom: 0, background: bottomBg }} />
 
       <Ticker height={BOTTOM_BAR_H} right={`${index + 1} / ${total}`} text={ticker} />
     </AbsoluteFill>
